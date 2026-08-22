@@ -50,6 +50,13 @@ export interface SkillNode {
   exercises: Exercise[];
 }
 
+export interface XpDayRecord {
+  day: string;
+  shortDate: string;
+  xp: number;
+  goalXp: number;
+}
+
 export interface UserProfile {
   name: string;
   scholarLevel: string;
@@ -64,6 +71,7 @@ export interface UserProfile {
     pali: number;
     tamil: number;
   };
+  weeklyXpHistory?: XpDayRecord[];
   achievements: {
     id: string;
     title: string;

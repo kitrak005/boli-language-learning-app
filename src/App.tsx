@@ -13,6 +13,7 @@ import { PracticeView } from './components/PracticeView';
 import { ProfileView } from './components/ProfileView';
 import { TraditionSelectModal } from './components/TraditionSelectModal';
 import { LessonModal } from './components/LessonModal';
+import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
 import {
   TRADITIONS,
   INITIAL_PROFILE,
@@ -28,6 +29,7 @@ export default function App() {
   const [currentTraditionId, setCurrentTraditionId] = useState<TraditionId>('sanskrit');
   const [isTraditionModalOpen, setIsTraditionModalOpen] = useState(false);
   const [activeLessonNode, setActiveLessonNode] = useState<SkillNode | null>(null);
+  const [showLevelUpModal, setShowLevelUpModal] = useState<boolean>(false);
 
   const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
   const [sanskritTree, setSanskritTree] = useState<SkillNode[]>(SANSKRIT_SKILL_TREE);
@@ -61,15 +63,26 @@ export default function App() {
   };
 
   const handleCompleteLesson = (xpEarned: number) => {
-    setProfile((prev) => ({
-      ...prev,
-      totalXp: prev.totalXp + xpEarned,
-      dailyXp: Math.min(prev.maxDailyXp, prev.dailyXp + 8),
-      languageMastery: {
-        ...prev.languageMastery,
-        [currentTraditionId]: Math.min(100, (prev.languageMastery[currentTraditionId] || 0) + 5),
-      },
-    }));
+    setProfile((prev) => {
+      const nextDaily = Math.min(prev.maxDailyXp, prev.dailyXp + 8);
+      const justAchievedGoal = nextDaily >= prev.maxDailyXp && prev.dailyXp < prev.maxDailyXp;
+
+      if (justAchievedGoal) {
+        setTimeout(() => {
+          setShowLevelUpModal(true);
+        }, 600);
+      }
+
+      return {
+        ...prev,
+        totalXp: prev.totalXp + xpEarned,
+        dailyXp: nextDaily,
+        languageMastery: {
+          ...prev.languageMastery,
+          [currentTraditionId]: Math.min(100, (prev.languageMastery[currentTraditionId] || 0) + 5),
+        },
+      };
+    });
 
     // Unlock next node in tree
     if (currentTraditionId === 'sanskrit') {
@@ -88,11 +101,22 @@ export default function App() {
   };
 
   const handleEarnXp = (amount: number) => {
-    setProfile((prev) => ({
-      ...prev,
-      totalXp: prev.totalXp + amount,
-      dailyXp: Math.min(prev.maxDailyXp, prev.dailyXp + 5),
-    }));
+    setProfile((prev) => {
+      const nextDaily = Math.min(prev.maxDailyXp, prev.dailyXp + 5);
+      const justAchievedGoal = nextDaily >= prev.maxDailyXp && prev.dailyXp < prev.maxDailyXp;
+
+      if (justAchievedGoal) {
+        setTimeout(() => {
+          setShowLevelUpModal(true);
+        }, 500);
+      }
+
+      return {
+        ...prev,
+        totalXp: prev.totalXp + amount,
+        dailyXp: nextDaily,
+      };
+    });
   };
 
   return (
@@ -118,6 +142,19 @@ export default function App() {
             onContinueLesson={handleStartActiveLesson}
             onStartReview={() => setActiveTab('practice')}
             onOpenTraditions={() => setIsTraditionModalOpen(true)}
+            onUpdateDailyGoal={(newGoal) => {
+              setProfile((prev) => {
+                const nextProfile = {
+                  ...prev,
+                  maxDailyXp: newGoal,
+                };
+                if (prev.dailyXp >= newGoal && prev.dailyXp < prev.maxDailyXp) {
+                  setTimeout(() => setShowLevelUpModal(true), 300);
+                }
+                return nextProfile;
+              });
+            }}
+            onCelebrateGoal={() => setShowLevelUpModal(true)}
           />
         )}
 
@@ -163,6 +200,14 @@ export default function App() {
           onCompleteLesson={handleCompleteLesson}
         />
       )}
+
+      {/* Level Up & Daily Goal Celebration Confetti Modal */}
+      <LevelUpCelebrationModal
+        isOpen={showLevelUpModal}
+        onClose={() => setShowLevelUpModal(false)}
+        profile={profile}
+        traditionName={currentTradition.name}
+      />
     </div>
   );
 }

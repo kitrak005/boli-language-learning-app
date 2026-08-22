@@ -15,6 +15,8 @@ import {
 import { LanguageTradition, UserProfile, WordOfTheDay } from '../types';
 import { WORDS_OF_THE_DAY } from '../data/mockData';
 import { sound } from '../utils/audio';
+import { IndianTeacher } from './IndianTeacher';
+import { DailyGoalTracker } from './DailyGoalTracker';
 
 interface HomeViewProps {
   currentTradition: LanguageTradition;
@@ -22,6 +24,8 @@ interface HomeViewProps {
   onContinueLesson: () => void;
   onStartReview: () => void;
   onOpenTraditions: () => void;
+  onUpdateDailyGoal?: (newGoal: number) => void;
+  onCelebrateGoal?: () => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -30,6 +34,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onContinueLesson,
   onStartReview,
   onOpenTraditions,
+  onUpdateDailyGoal,
+  onCelebrateGoal,
 }) => {
   const [wordIndex, setWordIndex] = useState(0);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -42,9 +48,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const handlePronounce = (e?: React.MouseEvent) => {
     e?.stopPropagation();
+    sound.unlockAudio();
     setIsPlayingAudio(true);
-    sound.speak(currentWord.script, currentTradition.id);
-    setTimeout(() => setIsPlayingAudio(false), 1200);
+    sound.speak(
+      currentWord.script,
+      currentTradition.id,
+      () => setIsPlayingAudio(true),
+      () => setIsPlayingAudio(false),
+      currentWord.transliteration
+    );
   };
 
   const getGreeting = () => {
@@ -62,41 +74,64 @@ export const HomeView: React.FC<HomeViewProps> = ({
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
       {/* Welcome & Status Bar */}
       <section className="space-y-3">
-        <h1 className="font-serif text-3xl sm:text-5xl font-light text-white tracking-tight">
-          {getGreeting()}
-        </h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h1 className="font-serif text-3xl sm:text-5xl font-light text-white tracking-tight">
+            {getGreeting()}
+          </h1>
 
-        {/* Status Pills */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            id="btn-tag-tradition"
-            onClick={onOpenTraditions}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] text-xs font-semibold hover:bg-[#C5A059]/20 transition-colors cursor-pointer"
-          >
-            <Globe2 className="w-3.5 h-3.5 text-[#C5A059]" />
-            <span className="uppercase tracking-widest text-[10px]">
-              {currentTradition.name.toUpperCase()}
-            </span>
-          </button>
+          {/* Status Pills */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              id="btn-tag-tradition"
+              onClick={onOpenTraditions}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] text-xs font-semibold hover:bg-[#C5A059]/20 transition-colors cursor-pointer"
+            >
+              <Globe2 className="w-3.5 h-3.5 text-[#C5A059]" />
+              <span className="uppercase tracking-widest text-[10px]">
+                {currentTradition.name.toUpperCase()}
+              </span>
+            </button>
 
-          <div
-            id="badge-xp-daily"
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-white/70 text-xs font-medium"
-          >
-            <Zap className="w-3.5 h-3.5 text-[#C5A059] fill-[#C5A059]" />
-            <span>
-              {profile.dailyXp}/{profile.maxDailyXp} XP
-            </span>
-          </div>
+            <div
+              id="badge-xp-daily"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-white/70 text-xs font-medium"
+            >
+              <Zap className="w-3.5 h-3.5 text-[#C5A059] fill-[#C5A059]" />
+              <span>
+                {profile.dailyXp}/{profile.maxDailyXp} XP
+              </span>
+            </div>
 
-          <div
-            id="badge-streak-days"
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-white/70 text-xs font-medium"
-          >
-            <span>🔥 {profile.streakDays} Days</span>
+            <div
+              id="badge-streak-days"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-white/70 text-xs font-medium"
+            >
+              <span>🔥 {profile.streakDays} Days</span>
+            </div>
           </div>
         </div>
       </section>
+
+      {/* 2D Animated Indian Teacher Companion Section */}
+      <section className="relative">
+        <IndianTeacher
+          size="md"
+          traditionId={currentTradition.id}
+          showBubble={true}
+          interactive={true}
+          className="w-full"
+        />
+      </section>
+
+      {/* Daily Goal Tracking Section with Circular Progress */}
+      <DailyGoalTracker
+        dailyXp={profile.dailyXp}
+        maxDailyXp={profile.maxDailyXp}
+        streakDays={profile.streakDays}
+        onUpdateGoal={onUpdateDailyGoal}
+        onStartStudy={onContinueLesson}
+        onCelebrate={onCelebrateGoal}
+      />
 
       {/* Primary Action: Current Lesson Card */}
       <section>
@@ -140,9 +175,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 sound.playTileClick();
                 onContinueLesson();
               }}
-              className="btn-gold w-full md:w-auto min-h-[48px] px-8 py-3.5 rounded-lg text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.15em] flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer group"
+              className="btn-gold w-full md:w-auto min-h-[48px] px-8 py-3.5 rounded-lg text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.15em] flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer group shadow-lg shadow-[#C5A059]/20"
             >
-              <span>Continue</span>
+              <span>Continue Lesson</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
@@ -172,8 +207,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
             <div>
               <h3 className="font-serif text-xl font-normal text-white">Daily Review</h3>
-              <p className="text-sm text-white/60 mt-1.5 leading-relaxed">
-                Strengthen your memory with 10 personalized flashcards.
+              <p className="text-sm text-white/60 mt-1.5 leading-relaxed font-light">
+                Strengthen your classical memory with 10 interactive flashcards.
               </p>
             </div>
           </div>
@@ -203,7 +238,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <button
                   id="btn-pronounce-wotd"
                   onClick={handlePronounce}
-                  title="Pronounce word"
+                  title="Pronounce word with voice"
                   className={`w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[#C5A059] hover:bg-white/10 hover:border-[#C5A059]/40 transition-all cursor-pointer ${
                     isPlayingAudio ? 'ring-2 ring-[#C5A059] scale-110' : ''
                   }`}
@@ -222,14 +257,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
             </div>
 
-            {/* Large Script Character */}
-            <div className="text-center py-2 sm:py-3">
-              <h3 className="text-5xl sm:text-6xl text-[#C5A059] mb-1.5 font-serif font-normal tracking-wide">
+            {/* Large Script Character with Tap-to-Pronounce */}
+            <div
+              onClick={handlePronounce}
+              className="text-center py-2 sm:py-3 cursor-pointer group/word"
+              title="Click to hear pronunciation"
+            >
+              <h3 className="text-5xl sm:text-6xl text-[#C5A059] mb-1.5 font-serif font-normal tracking-wide group-hover/word:scale-105 transition-transform">
                 {currentWord.script}
               </h3>
-              <p className="text-sm uppercase tracking-[0.2em] text-[#C5A059]/80 font-medium">
+              <p className="text-sm uppercase tracking-[0.2em] text-[#C5A059]/80 font-medium font-mono">
                 {currentWord.transliteration}
               </p>
+              <span className="text-[10px] text-white/40 block mt-1 flex items-center justify-center gap-1">
+                <Volume2 className="w-2.5 h-2.5 text-[#C5A059]" /> Tap to pronounce
+              </span>
             </div>
           </div>
 
@@ -239,10 +281,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </p>
 
             {showWordDetails && (
-              <div className="mt-3 text-left p-3 rounded-lg bg-black/60 border border-white/10 text-xs text-white/70 space-y-1.5 animate-in fade-in duration-200">
+              <div className="mt-3 text-left p-3.5 rounded-lg bg-black/60 border border-white/10 text-xs text-white/70 space-y-1.5 animate-in fade-in duration-200">
                 <p className="font-semibold text-[#C5A059]">Etymology: {currentWord.etymology}</p>
                 {currentWord.verseExample && (
-                  <div className="pt-1 border-t border-white/10">
+                  <div className="pt-1.5 border-t border-white/10">
                     <p className="font-serif text-white/90 text-sm">{currentWord.verseExample.script}</p>
                     <p className="italic text-white/50 text-[11px]">
                       "{currentWord.verseExample.translation}" — {currentWord.verseExample.source}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Heart, Volume2, Sparkles, CheckCircle2, AlertCircle, ArrowRight, RotateCcw, Award } from 'lucide-react';
 import { Exercise, SkillNode, WordTile } from '../types';
 import { sound } from '../utils/audio';
+import { IndianTeacher, GuruEmotion } from './IndianTeacher';
 
 interface LessonModalProps {
   node: SkillNode;
@@ -16,6 +17,8 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
   const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [isCompleted, setIsCompleted] = useState(false);
   const [totalXpEarned, setTotalXpEarned] = useState(0);
+  const [teacherEmotion, setTeacherEmotion] = useState<GuruEmotion>('idle');
+  const [teacherTip, setTeacherTip] = useState<string>('Listen to each sacred term and arrange in harmony.');
 
   // Fallback default exercise if none provided in node
   const defaultExercise: Exercise = {
@@ -46,8 +49,16 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
     if (feedbackStatus !== 'idle') return;
     if (placedWords.some((w) => w.id === word.id)) return;
 
+    sound.unlockAudio();
     sound.playTileClick();
-    sound.speak(word.script);
+    setTeacherEmotion('speaking');
+    sound.speak(
+      word.script,
+      'sanskrit',
+      () => setTeacherEmotion('speaking'),
+      () => setTeacherEmotion('idle'),
+      word.transliteration
+    );
     setPlacedWords([...placedWords, word]);
   };
 
@@ -68,10 +79,14 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
     if (isCorrect) {
       sound.playSuccessChime();
       setFeedbackStatus('correct');
+      setTeacherEmotion('happy');
+      setTeacherTip('उत्तमम्! (Uttamam!) Wonderfully constructed!');
       setTotalXpEarned((prev) => prev + 15);
     } else {
       sound.playErrorChime();
       setFeedbackStatus('incorrect');
+      setTeacherEmotion('encouraging');
+      setTeacherTip('चिन्ता मा कुरु (Do not worry). Review the Sandhi and try again.');
       setHearts((prev) => Math.max(0, prev - 1));
     }
   };
@@ -81,8 +96,11 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
       setCurrentExerciseIndex((prev) => prev + 1);
       setPlacedWords([]);
       setFeedbackStatus('idle');
+      setTeacherEmotion('idle');
+      setTeacherTip('Observe the word order and subtle inflections.');
     } else {
       setIsCompleted(true);
+      setTeacherEmotion('namaste');
       onCompleteLesson(totalXpEarned + 15);
     }
   };
@@ -90,10 +108,21 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
   const handleRetry = () => {
     setPlacedWords([]);
     setFeedbackStatus('idle');
+    setTeacherEmotion('thinking');
+    setTeacherTip('Rearrange the tiles in classical subject-object-verb order.');
   };
 
   const handlePronouncePrompt = () => {
-    sound.speak(currentExercise.targetScript || currentExercise.targetTranslation);
+    sound.unlockAudio();
+    const textToSpeak = currentExercise.targetScript || currentExercise.targetTranslation;
+    setTeacherEmotion('speaking');
+    sound.speak(
+      textToSpeak,
+      'sanskrit',
+      () => setTeacherEmotion('speaking'),
+      () => setTeacherEmotion('idle'),
+      currentExercise.targetTransliteration
+    );
   };
 
   return (
@@ -125,9 +154,22 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
 
       {/* Main Interactive Canvas */}
       {!isCompleted ? (
-        <main className="flex-grow flex flex-col items-center justify-center px-4 sm:px-8 w-full max-w-2xl mx-auto pb-32">
+        <main className="flex-grow flex flex-col items-center justify-start sm:justify-center px-4 sm:px-8 w-full max-w-2xl mx-auto py-4 sm:py-6 pb-36 overflow-y-auto">
+          {/* Animated 2D Indian Teacher Mascot Header */}
+          <div className="w-full mb-4 sm:mb-6">
+            <IndianTeacher
+              emotion={teacherEmotion}
+              customMessage={teacherTip}
+              size="sm"
+              showBubble={true}
+              interactive={true}
+              onSpeak={() => handlePronouncePrompt()}
+              className="max-w-xl mx-auto"
+            />
+          </div>
+
           {/* Challenge Prompt */}
-          <div className="w-full text-center mb-6 sm:mb-8 animate-in fade-in duration-200">
+          <div className="w-full text-center mb-5 sm:mb-6 animate-in fade-in duration-200">
             <span className="text-[10px] uppercase tracking-[0.25em] font-semibold text-[#C5A059] block mb-1">
               SACRED TRANSLATION
             </span>
@@ -135,14 +177,14 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
               {currentExercise.instruction}
             </h1>
             <div className="inline-flex items-center gap-2">
-              <p className="text-lg sm:text-xl text-white/70 font-light">
+              <p className="text-lg sm:text-xl text-white/80 font-light">
                 {currentExercise.promptText}
               </p>
               <button
                 id="btn-pronounce-sentence"
                 onClick={handlePronouncePrompt}
-                title="Listen to Sanskrit"
-                className="p-1.5 rounded-full bg-white/5 text-[#C5A059] hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+                title="Listen to Sanskrit pronunciation"
+                className="p-2 rounded-full bg-white/5 text-[#C5A059] hover:bg-white/15 border border-white/10 hover:border-[#C5A059]/40 transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 <Volume2 className="w-4 h-4" />
               </button>
@@ -150,14 +192,14 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
           </div>
 
           {/* Construction Area */}
-          <div className="w-full min-h-[128px] flex flex-wrap items-center justify-center gap-3 p-4 sm:p-6 bg-[#121212] border border-white/10 rounded-2xl mb-8 shadow-2xl">
+          <div className="w-full min-h-[110px] sm:min-h-[128px] flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 p-4 sm:p-6 bg-[#121212] border border-white/10 rounded-2xl mb-6 sm:mb-8 shadow-2xl">
             {/* Active Placed Tiles */}
             {placedWords.map((word) => (
               <div
                 key={word.id}
                 id={`placed-tile-${word.id}`}
                 onClick={() => handleRemoveWord(word.id)}
-                className="h-16 px-5 bg-[#1C1C1E] border border-[#C5A059]/40 rounded-xl flex flex-col items-center justify-center cursor-pointer shadow-md relative overflow-hidden group hover:border-rose-500 transition-all"
+                className="h-16 px-4 sm:px-5 bg-[#1C1C1E] border border-[#C5A059]/40 rounded-xl flex flex-col items-center justify-center cursor-pointer shadow-md relative overflow-hidden group hover:border-rose-500 transition-all"
               >
                 <span className="text-2xl leading-tight text-white font-serif">
                   {word.script}
@@ -177,7 +219,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
             }).map((_, idx) => (
               <div
                 key={`empty-slot-${idx}`}
-                className={`h-16 w-28 border-b-2 flex items-center justify-center transition-colors ${
+                className={`h-16 w-24 sm:w-28 border-b-2 flex items-center justify-center transition-colors ${
                   idx === 0 ? 'border-[#C5A059]' : 'border-white/20'
                 }`}
               />
@@ -185,7 +227,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
           </div>
 
           {/* Word Bank Tiles */}
-          <div className="w-full flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+          <div className="w-full flex flex-wrap items-center justify-center gap-2.5 sm:gap-4">
             {currentExercise.wordBank.map((word) => {
               const isPlaced = placedWords.some((w) => w.id === word.id);
 
@@ -195,39 +237,36 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
                   id={`word-bank-${word.id}`}
                   onClick={() => handlePlaceWord(word)}
                   disabled={isPlaced}
-                  className={`h-[72px] px-6 sm:px-8 rounded-xl flex flex-col items-center justify-center transition-all ${
+                  className={`h-[68px] sm:h-[72px] px-5 sm:px-8 rounded-xl flex flex-col items-center justify-center transition-all ${
                     isPlaced
                       ? 'bg-white/[0.02] text-white/20 opacity-30 cursor-not-allowed border border-white/5'
                       : 'bg-[#161616] border border-white/15 text-white hover:border-[#C5A059] hover:bg-[#1E1E1E] active:scale-95 cursor-pointer group shadow-lg'
                   }`}
                 >
-                  <span className="text-2xl sm:text-[26px] leading-tight text-white group-hover:text-[#C5A059] font-serif transition-colors">
+                  <span className="text-xl sm:text-[26px] leading-tight text-white group-hover:text-[#C5A059] font-serif transition-colors">
                     {word.script}
                   </span>
-                  <span className="text-xs text-white/50 group-hover:text-white/70 font-mono">{word.transliteration}</span>
+                  <span className="text-[11px] sm:text-xs text-white/50 group-hover:text-white/70 font-mono">{word.transliteration}</span>
                 </button>
               );
             })}
           </div>
         </main>
       ) : (
-        /* Victory Completion Screen */
-        <main className="flex-grow flex flex-col items-center justify-center px-6 text-center max-w-md mx-auto py-12 animate-in zoom-in-95 duration-300">
-          <div className="w-24 h-24 rounded-full bg-[#C5A059]/15 border-2 border-[#C5A059] flex items-center justify-center mb-6 glow-gold shadow-2xl">
-            <Award className="w-12 h-12 text-[#C5A059]" />
+        /* Victory Completion Screen with Celebrating Teacher */
+        <main className="flex-grow flex flex-col items-center justify-center px-6 text-center max-w-lg mx-auto py-8 sm:py-12 animate-in zoom-in-95 duration-300">
+          <div className="mb-4">
+            <IndianTeacher
+              emotion="happy"
+              customMessage="विजयी भव! You have mastered this classical lesson with distinction!"
+              size="lg"
+              showBubble={true}
+              interactive={true}
+              className="mx-auto justify-center"
+            />
           </div>
 
-          <span className="text-[10px] uppercase tracking-[0.25em] font-semibold text-[#C5A059] block mb-1">
-            SACRED REVELATION COMPLETE
-          </span>
-          <h2 className="font-serif text-3xl sm:text-4xl font-normal text-white mb-2">
-            Lesson Completed
-          </h2>
-          <p className="text-sm text-white/60 mb-6 font-light">
-            You have deepened your resonance with the classical canon.
-          </p>
-
-          <div className="w-full bg-[#121212] rounded-2xl border border-white/10 p-5 shadow-xl space-y-4 mb-8">
+          <div className="w-full bg-[#121212] rounded-2xl border border-white/10 p-5 shadow-xl space-y-3 mb-6">
             <div className="flex justify-between items-center py-2 border-b border-white/10">
               <span className="text-xs uppercase tracking-wider text-white/60">Total XP Earned</span>
               <span className="text-lg font-bold text-[#C5A059]">+{totalXpEarned + 15} XP</span>
@@ -245,7 +284,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
           <button
             id="btn-finish-lesson"
             onClick={onClose}
-            className="btn-gold w-full py-4 rounded-lg text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.2em] transition-all cursor-pointer shadow-lg"
+            className="btn-gold w-full py-4 rounded-lg text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.2em] transition-all cursor-pointer shadow-lg shadow-[#C5A059]/20"
           >
             Return to Learning Path
           </button>
@@ -280,7 +319,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
                   disabled={placedWords.length === 0}
                   className={`w-full sm:w-64 py-3.5 rounded-lg text-xs font-bold uppercase tracking-[0.15em] transition-all duration-200 ${
                     placedWords.length > 0
-                      ? 'btn-gold cursor-pointer'
+                      ? 'btn-gold cursor-pointer shadow-lg shadow-[#C5A059]/20'
                       : 'bg-white/5 text-white/30 border border-white/5 cursor-not-allowed'
                   }`}
                 >

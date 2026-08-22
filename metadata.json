@@ -1,6 +1,6 @@
 {
   "name": "Vākya",
   "description": "Digital sanctuary and interactive learning platform for classical Indian languages and manuscripts.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

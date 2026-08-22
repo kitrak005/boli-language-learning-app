@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Star, Flame, Sparkles, Award, Settings, Check, Volume2 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { WeeklyXpD3Chart } from './WeeklyXpD3Chart';
 
 interface ProfileViewProps {
   profile: UserProfile;
@@ -55,6 +56,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile }) => {
           </span>
         </div>
       </section>
+
+      {/* 7-Day Consistency & XP Progress D3 Chart */}
+      <WeeklyXpD3Chart
+        data={profile.weeklyXpHistory}
+        dailyXp={profile.dailyXp}
+        maxDailyXp={profile.maxDailyXp}
+        streakDays={profile.streakDays}
+      />
 
       {/* Language Mastery */}
       <section className="space-y-4">

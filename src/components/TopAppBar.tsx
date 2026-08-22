@@ -1,6 +1,7 @@
-import React from 'react';
-import { BookOpen, Flame, Globe2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { BookOpen, Globe2, Volume2, VolumeX } from 'lucide-react';
 import { LanguageTradition } from '../types';
+import { sound } from '../utils/audio';
 
 interface TopAppBarProps {
   currentTradition: LanguageTradition;
@@ -17,6 +18,16 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   onTabChange,
   onOpenTraditions,
 }) => {
+  const [isMuted, setIsMuted] = useState(sound.getIsMuted());
+
+  const handleToggleSound = () => {
+    const muted = sound.toggleMute();
+    setIsMuted(muted);
+    if (!muted) {
+      sound.playSuccessChime();
+    }
+  };
+
   return (
     <header className="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-4 sm:px-8 h-16 bg-[#0A0A0A]/90 backdrop-blur-md border-b border-white/10 transition-all duration-200">
       {/* Left: Book / Tradition switcher */}
@@ -65,8 +76,17 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         ))}
       </nav>
 
-      {/* Right: Tradition quick switch & Streak Badge */}
-      <div className="flex items-center gap-2.5">
+      {/* Right: Sound Controls, Tradition quick switch & Streak Badge */}
+      <div className="flex items-center gap-2 sm:gap-2.5">
+        <button
+          id="btn-sound-mute-toggle"
+          onClick={handleToggleSound}
+          title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+          className="p-2 rounded-full bg-white/[0.04] border border-white/10 text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-[#C5A059]" />}
+        </button>
+
         <button
           id="btn-quick-tradition"
           onClick={onOpenTraditions}

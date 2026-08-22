@@ -53,6 +53,15 @@ export const INITIAL_PROFILE: UserProfile = {
     pali: 40,
     tamil: 30,
   },
+  weeklyXpHistory: [
+    { day: 'Sun', shortDate: 'Aug 16', xp: 15, goalXp: 20 },
+    { day: 'Mon', shortDate: 'Aug 17', xp: 22, goalXp: 20 },
+    { day: 'Tue', shortDate: 'Aug 18', xp: 25, goalXp: 20 },
+    { day: 'Wed', shortDate: 'Aug 19', xp: 18, goalXp: 20 },
+    { day: 'Thu', shortDate: 'Aug 20', xp: 30, goalXp: 20 },
+    { day: 'Fri', shortDate: 'Aug 21', xp: 24, goalXp: 20 },
+    { day: 'Sat', shortDate: 'Today', xp: 12, goalXp: 20 },
+  ],
   achievements: [
     {
       id: 'first-lesson',
