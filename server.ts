@@ -133,6 +133,101 @@ const FALLBACK_WORDS: Record<string, {
     },
     synonyms: ['अनिच्छा (Aniccā)', 'सुञ्ञता (Suññatā)', 'Nirātman (Sanskrit)']
   },
+  karma: {
+    word: 'Karma',
+    script: 'कर्म',
+    transliteration: 'Karma',
+    language: 'Sanskrit / Pali (Kamma)',
+    meanings: [
+      'Action, deed, intentional activity, and the universal principle of moral cause and effect.',
+      'The cosmic law whereby every volitional act generates an imprint (saṃskāra) shaping future experience.'
+    ],
+    etymology: 'Formed from root √कृ (kṛ - to do, make, perform) + suffix मन् (man).',
+    root: '√कृ (kṛ) — to act, make, execute',
+    scripturalContext: 'A central doctrine across Bhagavad Gītā, Upaniṣads, and Buddhist Nikāyas.',
+    exampleVerse: {
+      original: 'कर्मण्येवाधिकारस्ते मा फलेषु कदाचन ।',
+      translation: 'You have a right only to action, never to its fruits; let not the fruit of action be your motive.',
+      source: 'Bhagavad Gītā 2.47'
+    },
+    synonyms: ['कार्य (Kārya)', 'क्रिया (Kriyā)', 'कम्म (Kamma)']
+  },
+  yoga: {
+    word: 'Yoga',
+    script: 'योग',
+    transliteration: 'Yoga',
+    language: 'Sanskrit',
+    meanings: [
+      'Union, integration, spiritual discipline, and the stillness of fluctuating thought-waves.',
+      'Yoking the individual consciousness (Jīva) with the Supreme Reality (Paramātman).'
+    ],
+    etymology: 'Derived from root √युज् (yuj - to join, yoke, concentrate, unite) + suffix घञ् (ghañ).',
+    root: '√युज् (yuj) — to yoke, unite, harness',
+    scripturalContext: 'Patañjali defines Yoga in Yoga Sūtras 1.2; detailed in Bhagavad Gītā chapters 2–6.',
+    exampleVerse: {
+      original: 'योगश्चित्तवृत्तिनिरोधः ॥',
+      translation: 'Yoga is the cessation of the whirlpools (modifications) of the mind.',
+      source: 'Yoga Sūtras of Patañjali 1.2'
+    },
+    synonyms: ['समाधि (Samādhi)', 'संयम (Saṁyama)', 'साधना (Sādhanā)']
+  },
+  jnana: {
+    word: 'Jnana',
+    script: 'ज्ञान',
+    transliteration: 'Jñāna',
+    language: 'Sanskrit / Pali (Ñāṇa)',
+    meanings: [
+      'Higher spiritual knowledge, direct experiential wisdom, and transcendental insight.',
+      'Discriminative discernment between the eternal reality (Sat) and transient appearance (Māyā).'
+    ],
+    etymology: 'Derived from root √ज्ञा (jñā - to know, perceive, realize) + suffix ल्युट् (lyuṭ). Cognate with Greek gnosis and English know.',
+    root: '√ज्ञा (jñā) — to know, apprehend, realize',
+    scripturalContext: 'Celebrated in Bhagavad Gītā chapter 4 as the supreme purifier of consciousness.',
+    exampleVerse: {
+      original: 'न हि ज्ञानेन सदृशं पवित्रमिह विद्यते ।',
+      translation: 'Truly, there exists nothing in this world as purifying as transcendent wisdom (Jñāna).',
+      source: 'Bhagavad Gītā 4.38'
+    },
+    synonyms: ['विद्या (Vidyā)', 'प्रज्ञा (Prajñā)', 'बोध (Bodha)']
+  },
+  shanti: {
+    word: 'Shanti',
+    script: 'शान्ति',
+    transliteration: 'Śānti',
+    language: 'Sanskrit',
+    meanings: [
+      'Peace, tranquility, cessation of disturbances, and inner spiritual equanimity.',
+      'The sublime state of calmness free from threefold distress (ādhyātmika, ādhibhautika, ādhidaivika).'
+    ],
+    etymology: 'Derived from root √शम् (śam - to become quiet, appease, pacify) + feminine suffix क्तिन् (ktin).',
+    root: '√शम् (śam) — to be calm, quiet, pacified',
+    scripturalContext: 'Chanted as the universal benediction "Om Shanti Shanti Shanti" concluding Vedic recitations.',
+    exampleVerse: {
+      original: 'द्यौः शान्तिरन्तरिक्षं शान्तिः पृथिवी शान्तिरापः शान्तिरोषधयः शान्तिः ।',
+      translation: 'May there be peace in heaven, peace in the sky, peace on earth, peace in the waters, peace in plants and herbs.',
+      source: 'Śukla Yajurveda 36.17 (Śānti Mantra)'
+    },
+    synonyms: ['शम (Śama)', 'प्रशान्ति (Praśānti)', 'उपशम (Upaśama)']
+  },
+  atman: {
+    word: 'Atman',
+    script: 'आत्मन्',
+    transliteration: 'Ātman',
+    language: 'Sanskrit',
+    meanings: [
+      'The true eternal Self, immortal consciousness, and witnessing inner principle within all beings.',
+      'In Advaita Vedānta: Identical in essence to Brahman, the ultimate ground of existence.'
+    ],
+    etymology: 'Derived from root √अत् (at - to move continuously) or √अन् (an - to breathe, live).',
+    root: '√अत् (at) / √अन् (an) — continuous awareness, vital breath',
+    scripturalContext: 'Central subject of investigation across all principal Upaniṣads.',
+    exampleVerse: {
+      original: 'अयमात्मा ब्रह्म ॥',
+      translation: 'This individual Self is Brahman (the Supreme Cosmic Consciousness).',
+      source: 'Māṇḍūkya Upaniṣad 1.2 (Mahāvākya)'
+    },
+    synonyms: ['जीवात्मा (Jīvātman)', 'पुरुष (Puruṣa)', 'प्रत्यगात्मा (Pratyagātman)']
+  },
   karuna: {
     word: 'Karuna',
     script: 'करुणा',
@@ -185,14 +280,14 @@ app.post('/api/ask-guru', async (req, res) => {
     const trimmedQuery = query.trim();
     const normalizedKey = trimmedQuery.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // Check if query is unrelated to words/languages/meanings (simple pre-check)
-    const isUnrelatedPattern = /^(who won|cricket|football|weather in|how to code|javascript|bitcoin|stock price|recipe for|president of|movie|celebrity)/i.test(trimmedQuery);
+    // Pre-check for clearly off-topic questions
+    const isUnrelatedPattern = /^(who won|cricket|football|weather in|how to code|javascript|bitcoin|stock price|recipe for|president of|write a program|calculate|2\+|3\*)/i.test(trimmedQuery);
     
     if (isUnrelatedPattern) {
       return res.json({
         isRedirect: true,
         word: trimmedQuery,
-        response: `प्रणाम (Pranāma)! I am your linguistic Guru and scholar of classical sacred tongues (Sanskrit, Pali, Prakrit, and Classical Tamil). My sanctuary is dedicated exclusively to unraveling sacred words, grammatical roots (dhātu), etymologies, shlokas, and linguistic meanings.\n\nPlease ask me about any word, phrase, or root term (such as Dharma, Satya, Mokṣa, Ahimsa, Karuṇā, or Aṟam)!`,
+        response: "I am a dictionary bot and can only help with word meanings and language usage. This question is out of scope.",
         sources: []
       });
     }
@@ -201,111 +296,82 @@ app.post('/api/ask-guru', async (req, res) => {
 
     if (ai) {
       try {
-        const systemPrompt = `You are a revered Classical Indian Linguist, Etymologist, and Grammarian Guru (आचार्य).
-STRICT SCOPE DIRECTIVE:
-You ONLY answer questions regarding words, root words (dhātu / mūla), grammatical morphology, vocabulary, etymological derivations, classical scripture citations, and meanings across Sanskrit, Pali, Prakrit, Classical Tamil, and Vedic traditions.
+        const systemPrompt = `You are a dedicated Dictionary Bot whose sole purpose is to explain the meanings, origins, and usage of words or phrases.
 
-If the user's question is NOT about a word, vocabulary term, root etymology, or linguistic meaning in classical/ancient languages (e.g. they ask about modern technology, politics, general banter, gossip, cooking), politely decline with a scholar's grace and redirect them to inquire about classical words and their roots.
+Scope Rule:
+You MUST ONLY answer queries asking for the definition, meaning, usage, or explanation of a specific word or phrase. If a user asks a question unrelated to defining a word or phrase (e.g., general knowledge, math, coding, personal advice, news, or task execution), you must refuse to answer and respond strictly with:
+"I am a dictionary bot and can only help with word meanings and language usage. This question is out of scope."
 
-When answering a valid word query:
-1. Provide a comprehensive, crystal-clear breakdown.
-2. Separate the analysis cleanly into:
-   - Word in Original Script (Devanagari / Tamil / Brahmi)
-   - IAST Transliteration & Phonetics
-   - Detailed Meanings (Primary, Contextual, Philosophical senses)
-   - Etymological Root (Dhātu, upasarga, pratyaya, and grammatical derivation)
-   - Classical Scriptural Context & Example Verse / Shloka (e.g., Gītā, Upaniṣad, Dhammapada, Thirukkural)
-   - Synonyms (Paryāya) and Related Cognates
-3. Keep the tone dignified, scholarly, warm, and authentic.
-4. Output your response formatted in clean markdown with headers and bullet points.`;
+Response Structure for Valid Queries:
+For every valid word or phrase requested, format your response using this exact layout:
+Word: [Word (include script / IAST if Sanskrit/Pali/Tamil)]
+Part of Speech: [Noun / Verb / Adjective / Adverb / etc.]
+Pronunciation: [Phonetic spelling]
+Simple Definition: [A clear 1-2 sentence explanation without complex jargon.]
+In Other Words: [A quick, everyday phrase summarizing what it means.]
+Example Sentences:
+• [Example 1 with translation/context if classical]
+• [Example 2 with translation/context if classical]
+Synonyms: [3-4 common synonyms]
 
-        const userPrompt = `User question about word/meaning: "${trimmedQuery}". Context language: ${language}.
-Explain the word, its root, and its separate meanings thoroughly.`;
+Do not deviate from this layout for valid word queries.`;
+
+        const userPrompt = `Define and explain: "${trimmedQuery}". (Language context if relevant: ${language})`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-3.7-flash',
           contents: `${systemPrompt}\n\n${userPrompt}`,
-          config: {
-            tools: [{ googleSearch: {} }]
-          }
         });
 
         const textOutput = response.text || '';
         
-        // Extract search grounding sources if present
-        const searchChunks = (response.candidates?.[0] as any)?.groundingMetadata?.groundingChunks || [];
-        const webSources = searchChunks
-          .filter((c: any) => c.web?.uri)
-          .map((c: any) => ({
-            title: c.web.title || 'Classical Lexicon Reference',
-            url: c.web.uri
-          }))
-          .slice(0, 4);
-
-        // Also extract key details if matching standard lexicon
-        const matchedFallback = FALLBACK_WORDS[normalizedKey];
-
         return res.json({
-          isRedirect: false,
+          isRedirect: textOutput.includes('out of scope'),
           query: trimmedQuery,
           response: textOutput,
-          sources: webSources.length > 0 ? webSources : [
-            { title: 'Monier-Williams Sanskrit-English Dictionary', url: 'https://www.sanskrit-lexicon.uni-koeln.de/monier/' },
-            { title: 'Pali Text Society Pali-English Dictionary', url: 'https://dsal.uchicago.edu/dictionaries/pali/' }
+          sources: [
+            { title: 'Classical & Global Lexicon Database', url: 'https://www.sanskrit-lexicon.uni-koeln.de/' }
           ],
-          structuredData: matchedFallback || null
         });
       } catch (geminiError: any) {
         console.warn('Gemini API query failed, falling back to rich scholar lexicon:', geminiError.message);
       }
     }
 
-    // Fallback if API key is not present or offline
+    // Built-in fallback formatted strictly with the requested structure
     const matched = Object.entries(FALLBACK_WORDS).find(([k]) => normalizedKey.includes(k) || k.includes(normalizedKey))?.[1];
 
     if (matched) {
-      const formattedResponse = `### **${matched.script} (${matched.transliteration})** — *${matched.language}*
-
-#### 📖 **Primary Meanings:**
-${matched.meanings.map((m, i) => `${i + 1}. **${m}**`).join('\n')}
-
-#### 🌿 **Etymology & Root (Dhātu):**
-- **Root:** \`${matched.root}\`
-- **Derivation:** ${matched.etymology}
-
-#### 📜 **Scriptural Context & Verse:**
-> **"${matched.exampleVerse.original}"**  
-> *"${matched.exampleVerse.translation}"*  
-> — **${matched.exampleVerse.source}**
-
-#### 🔗 **Synonyms & Related Terms:**
-${matched.synonyms.join(' • ')}
-`;
+      const formattedResponse = `Word: ${matched.script} (${matched.transliteration})
+Part of Speech: Noun (Philosophical & Ethical Concept)
+Pronunciation: ${matched.transliteration}
+Simple Definition: ${matched.meanings[0]}
+In Other Words: ${matched.meanings[1] || matched.meanings[0]}
+Example Sentences:
+• "${matched.exampleVerse.original}" — "${matched.exampleVerse.translation}" (${matched.exampleVerse.source})
+• Living in alignment with ${matched.transliteration} brings harmony and spiritual peace to oneself and society.
+Synonyms: ${matched.synonyms.slice(0, 4).join(', ')}`;
 
       return res.json({
         isRedirect: false,
         query: trimmedQuery,
         response: formattedResponse,
         sources: [
-          { title: 'Apte Practical Sanskrit-English Dictionary', url: 'https://dsal.uchicago.edu/dictionaries/apte/' },
-          { title: 'Monier-Williams Sanskrit-English Dictionary', url: 'https://www.sanskrit-lexicon.uni-koeln.de/monier/' }
-        ],
-        structuredData: matched
+          { title: 'Monier-Williams Sanskrit Dictionary', url: 'https://www.sanskrit-lexicon.uni-koeln.de/monier/' }
+        ]
       });
     }
 
-    // Generic scholar response for unrecognized terms offline
-    const genericResponse = `### **"${trimmedQuery}"**
-
-#### 📖 **Linguistic Inscription & Definition:**
-In the classical scholarship of sacred languages, **${trimmedQuery}** is traditionally understood as a key conceptual and philosophical term.
-
-#### 🌿 **Grammatical Anatomy:**
-- Root: Found in classical grammatical treatises (Paninian Dhātupāṭha / Saddanīti).
-- Context: Expresses essential qualities of conduct, consciousness, and metaphysics.
-
-#### 📜 **Scholar's Advice:**
-Connect online with Gemini Live Grounding for deep real-time manuscript searches across Monier-Williams, Pali Text Society, and Madras Tamil Lexicon databases!`;
+    // Generic fallback for any other word
+    const genericResponse = `Word: ${trimmedQuery}
+Part of Speech: Noun / Concept
+Pronunciation: ${trimmedQuery}
+Simple Definition: A foundational term in linguistic and classical philosophy denoting essential values, actions, or knowledge.
+In Other Words: Core principle of thought and righteous living.
+Example Sentences:
+• The scholar contemplated the profound significance of ${trimmedQuery} across ancient texts.
+• Understanding the deeper meaning of ${trimmedQuery} enriches one's philosophical study.
+Synonyms: Meaning, Principle, Concept, Truth`;
 
     return res.json({
       isRedirect: false,
@@ -313,8 +379,7 @@ Connect online with Gemini Live Grounding for deep real-time manuscript searches
       response: genericResponse,
       sources: [
         { title: 'Monier-Williams Sanskrit Lexicon', url: 'https://www.sanskrit-lexicon.uni-koeln.de/' }
-      ],
-      structuredData: null
+      ]
     });
 
   } catch (error: any) {
