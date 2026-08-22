@@ -98,7 +98,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
 
         <div
           id="badge-streak-header"
-          title={`${streakDays} days daily study streak`}
+          title={`${streakDays} ${streakDays === 1 ? 'day' : 'days'} daily study streak`}
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#C5A059]/10 border border-[#C5A059]/30 text-[#C5A059] font-semibold text-xs tracking-wide shadow-xs cursor-default"
         >
           <span>{streakDays}</span>
