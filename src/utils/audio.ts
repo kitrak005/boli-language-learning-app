@@ -354,9 +354,6 @@ class SoundEngine {
 
     this.unlockAudio();
 
-    // Always trigger rich acoustic Tanpura chord as warm musical foundation
-    this.playTanpuraPluck(langId === 'tamil' ? 240 : 220, 2.2);
-
     if (!('speechSynthesis' in window)) {
       // Fallback: acoustic chant resonance + visual speech sync
       this.playVedicChantResonance(2.2);

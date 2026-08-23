@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -19,6 +20,8 @@ function getAIClient(): GoogleGenAI | null {
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
       aiClient = new GoogleGenAI({ apiKey });
+    } else {
+      console.warn('[VAKYA] GEMINI_API_KEY is not set — Ask Guru will use offline fallback responses only.');
     }
   }
   return aiClient;
@@ -282,7 +285,7 @@ app.post('/api/ask-guru', async (req, res) => {
 
     // Pre-check for clearly off-topic questions
     const isUnrelatedPattern = /^(who won|cricket|football|weather in|how to code|javascript|bitcoin|stock price|recipe for|president of|write a program|calculate|2\+|3\*)/i.test(trimmedQuery);
-    
+
     if (isUnrelatedPattern) {
       return res.json({
         isRedirect: true,
@@ -324,7 +327,7 @@ Do not deviate from this layout for valid word queries.`;
         });
 
         const textOutput = response.text || '';
-        
+
         return res.json({
           isRedirect: textOutput.includes('out of scope'),
           query: trimmedQuery,
