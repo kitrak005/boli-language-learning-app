@@ -67,8 +67,8 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
             id={`nav-link-${item.id}`}
             onClick={() => onTabChange(item.id)}
             className={`text-xs uppercase tracking-[0.15em] font-medium transition-all duration-200 px-3.5 py-1.5 rounded-lg cursor-pointer ${activeTab === item.id
-                ? 'text-[#C5A059] bg-white/[0.06] border border-[#C5A059]/30 font-semibold shadow-xs'
-                : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
+              ? 'text-[#C5A059] bg-white/[0.06] border border-[#C5A059]/30 font-semibold shadow-xs'
+              : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
               }`}
           >
             {item.label}

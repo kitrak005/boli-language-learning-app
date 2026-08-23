@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Search,
-  Send,
+  ArrowRight,
   Sparkles,
   Volume2,
   BookOpen,
@@ -9,13 +9,11 @@ import {
   Check,
   ExternalLink,
   RotateCcw,
-  Feather,
   Quote,
   X,
   Languages,
   History,
   AlertCircle,
-  ChevronRight,
   Info
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -54,35 +52,25 @@ const LANGUAGE_FILTERS = [
   { id: 'tamil', label: 'Tamil', script: 'தமிழ்' },
 ];
 
-const CURATED_TOPICS = [
-  {
-    category: 'Core Virtues',
-    words: [
-      { label: 'Dharma (धर्म)', query: 'Dharma' },
-      { label: 'Satya (सत्य)', query: 'Satya' },
-      { label: 'Ahimsa (अहिंसा)', query: 'Ahimsa' },
-      { label: 'Aram (அறம்)', query: 'Aram' },
-    ],
-  },
-  {
-    category: 'Mind & Yoga',
-    words: [
-      { label: 'Yoga (योग)', query: 'Yoga' },
-      { label: 'Jnana (ज्ञान)', query: 'Jnana' },
-      { label: 'Karuna (करुणा)', query: 'Karuna' },
-      { label: 'Shanti (शान्ति)', query: 'Shanti' },
-    ],
-  },
-  {
-    category: 'Metaphysics',
-    words: [
-      { label: 'Moksha (मोक्ष)', query: 'Moksha' },
-      { label: 'Atman (आत्मन्)', query: 'Atman' },
-      { label: 'Anatta (अनत्त)', query: 'Anatta' },
-      { label: 'Karma (कर्म)', query: 'Karma' },
-    ],
-  },
+const QUICK_WORDS = [
+  { label: 'Dharma (धर्म)', query: 'Dharma' },
+  { label: 'Satya (सत्य)', query: 'Satya' },
+  { label: 'Ahimsa (अहिंसा)', query: 'Ahimsa' },
+  { label: 'Yoga (योग)', query: 'Yoga' },
+  { label: 'Moksha (मोक्ष)', query: 'Moksha' },
+  { label: 'Karma (कर्म)', query: 'Karma' },
 ];
+
+// Strips markdown emphasis characters (*text*, _text_, **text**) that
+// Gemini sometimes wraps transliterations in, so they don't leak into
+// fields that are rendered as raw text instead of through ReactMarkdown.
+function stripMarkdownEmphasis(value: string): string {
+  return value
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    .trim();
+}
 
 /**
  * Parses the exact response structure:
@@ -112,7 +100,6 @@ function parseDictionaryResponse(text: string): ParsedDictionaryEntry | null {
     };
   }
 
-  // Check if text follows the Dictionary layout
   const wordMatch = text.match(/Word:\s*(.+)/i);
   const posMatch = text.match(/Part of Speech:\s*(.+)/i);
   const pronMatch = text.match(/Pronunciation:\s*(.+)/i);
@@ -131,7 +118,7 @@ function parseDictionaryResponse(text: string): ParsedDictionaryEntry | null {
     for (const line of rawLines) {
       const trimmed = line.replace(/^[\s•\-\*\d\.]+\s*/, '').trim();
       if (trimmed) {
-        exampleSentences.push(trimmed);
+        exampleSentences.push(stripMarkdownEmphasis(trimmed));
       }
     }
   }
@@ -140,17 +127,17 @@ function parseDictionaryResponse(text: string): ParsedDictionaryEntry | null {
   if (synMatch) {
     const rawSyns = synMatch[1].split(/[,;•|]/);
     for (const s of rawSyns) {
-      const t = s.trim();
+      const t = stripMarkdownEmphasis(s.trim());
       if (t) synonyms.push(t);
     }
   }
 
   return {
-    word: wordMatch ? wordMatch[1].trim() : '',
-    partOfSpeech: posMatch ? posMatch[1].trim() : 'Noun',
-    pronunciation: pronMatch ? pronMatch[1].trim() : '',
-    simpleDefinition: defMatch ? defMatch[1].trim() : '',
-    inOtherWords: inOtherWordsMatch ? inOtherWordsMatch[1].trim() : '',
+    word: wordMatch ? stripMarkdownEmphasis(wordMatch[1]) : '',
+    partOfSpeech: posMatch ? stripMarkdownEmphasis(posMatch[1]) : 'Noun',
+    pronunciation: pronMatch ? stripMarkdownEmphasis(pronMatch[1]) : '',
+    simpleDefinition: defMatch ? stripMarkdownEmphasis(defMatch[1]) : '',
+    inOtherWords: inOtherWordsMatch ? stripMarkdownEmphasis(inOtherWordsMatch[1]) : '',
     exampleSentences,
     synonyms,
     isOutOfScope: false,
@@ -169,13 +156,13 @@ export const AskGuruChat: React.FC<AskGuruChatProps> = ({
       sender: 'guru',
       text: `Word: Dharma (धर्म / Dhamma)
 Part of Speech: Noun (Philosophical & Ethical Concept)
-Pronunciation: DHEHR-muh / [ˈdʱɐr.mɐ]
-Simple Definition: The universal cosmic order, natural law, and sacred ethical duty that upholds and harmonizes all existence.
-In Other Words: Living in righteous alignment with truth and moral purpose.
+Pronunciation: DHEHR-muh
+Simple Definition: The concept of *Dharma* (धर्म) is foundational to Indian philosophy, extending far beyond simple definitions of "religion" or "duty." It refers to the universal cosmic order and sacred ethical duty that upholds and harmonizes all existence.
+In Other Words: Living in righteous alignment with truth and cosmic moral purpose.
 Example Sentences:
 • "धारणाद्धर्म इत्याहुर्धर्मो धारयते प्रजाः ।" (Dharma is that which sustains; it preserves and holds together all beings in harmony.)
 • Practicing compassion, honesty, and responsibility in daily life is an essential expression of one's personal dharma.
-Synonyms: Righteousness, Sacred Duty, Cosmic Law, Virtue (ऋत, सदाचार)`,
+Synonyms: Righteousness, Sacred Duty, Cosmic Law, Virtue`,
       timestamp: 'Just now',
     },
   ]);
@@ -188,7 +175,6 @@ Synonyms: Righteousness, Sacred Duty, Cosmic Law, Virtue (ऋत, सदाच�
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Auto scroll to bottom when new messages arrive
   useEffect(() => {
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTo({
@@ -207,7 +193,6 @@ Synonyms: Righteousness, Sacred Duty, Cosmic Law, Virtue (ऋत, सदाच�
 
     const cleanWord = textToSend.trim();
 
-    // Add to recent searches
     setRecentSearches((prev) => {
       const filtered = prev.filter((w) => w.toLowerCase() !== cleanWord.toLowerCase());
       return [cleanWord, ...filtered].slice(0, 6);
@@ -230,7 +215,7 @@ Synonyms: Righteousness, Sacred Duty, Cosmic Law, Virtue (ऋत, सदाच�
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: cleanWord,
-          language: selectedLang === 'all' ? currentLanguage : selectedLang,
+          language: selectedLang,
         }),
       });
 
@@ -319,100 +304,84 @@ Synonyms: Term, Concept, Principle, Meaning`,
   return (
     <section
       id="ask-guru-chatbot-container"
-      className="bg-[#121212] rounded-2xl border border-white/10 shadow-2xl flex flex-col h-[700px] overflow-hidden"
+      className="bg-[#121212] rounded-2xl border border-white/10 shadow-2xl flex flex-col h-[680px] overflow-hidden"
     >
-      {/* 1. Header Bar: Dictionary Bot Scope & Status */}
-      <div className="px-5 py-4 border-b border-white/10 bg-[#161616] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3.5">
+      {/* Header */}
+      <div className="px-5 py-3.5 border-b border-white/10 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
           <div className="relative">
             <div
-              className="w-11 h-11 rounded-full bg-cover bg-center border-2 border-[#C5A059] shadow-md shrink-0"
+              className="w-9 h-9 rounded-full bg-cover bg-center border border-[#C5A059]/50 shrink-0"
               style={{ backgroundImage: `url('${avatarUrl}')` }}
             />
-            <span
-              className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#121212]"
-              title="Dictionary Engine Online"
-            />
+            <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border border-[#121212]" />
           </div>
 
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h3 className="font-serif text-base font-medium text-white tracking-wide">
+              <h3 className="font-serif text-sm font-medium text-white tracking-wide">
                 Ask Guru • Dictionary Bot
               </h3>
-              <span className="px-2 py-0.5 rounded-full bg-[#C5A059]/15 border border-[#C5A059]/30 text-[#C5A059] text-[9px] font-bold tracking-wider uppercase">
+              <span className="px-1.5 py-0.5 rounded bg-[#C5A059]/15 border border-[#C5A059]/30 text-[#C5A059] text-[8.5px] font-bold tracking-wider uppercase">
                 Word Meanings Only
               </span>
             </div>
-            <p className="text-[11px] text-white/50 font-light flex items-center gap-1.5 mt-0.5">
-              <span>Definitions • Pronunciation • Example Sentences • Synonyms</span>
+            <p className="text-[10px] text-white/40 font-light mt-0.5">
+              Definitions • Pronunciation • Example Sentences • Synonyms
             </p>
           </div>
         </div>
 
-        {/* Clear Conversation */}
         <button
           id="btn-reset-guru-chat"
           onClick={handleResetChat}
-          className="px-2.5 py-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-all text-xs flex items-center gap-1.5 cursor-pointer"
+          className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
           title="Clear Conversation"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline text-[11px]">Clear</span>
         </button>
       </div>
 
-      {/* 2. Language Filter Bar */}
-      <div className="px-4 py-2 bg-[#141414] border-b border-white/5 flex items-center justify-between gap-2 shrink-0 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Languages className="w-3.5 h-3.5 text-[#C5A059]" />
-          <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">Tradition:</span>
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          {LANGUAGE_FILTERS.map((lang) => (
-            <button
-              key={lang.id}
-              onClick={() => {
-                setSelectedLang(lang.id);
-                sound.playTileClick();
-              }}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
-                selectedLang === lang.id
-                  ? 'bg-[#C5A059] text-black font-semibold shadow-xs'
-                  : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'
+      {/* Tradition + Quick Words — combined into one compact row */}
+      <div className="px-4 py-2 border-b border-white/5 flex flex-wrap items-center gap-1.5 shrink-0">
+        <Languages className="w-3 h-3 text-[#C5A059] shrink-0" />
+        {LANGUAGE_FILTERS.map((lang) => (
+          <button
+            key={lang.id}
+            onClick={() => {
+              setSelectedLang(lang.id);
+              sound.playTileClick();
+            }}
+            className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all cursor-pointer ${selectedLang === lang.id
+                ? 'bg-[#C5A059] text-black font-semibold'
+                : 'bg-white/5 text-white/50 hover:text-white'
               }`}
+          >
+            {lang.label}
+          </button>
+        ))}
+
+        <span className="w-px h-3.5 bg-white/10 mx-1" />
+
+        <Sparkles className="w-3 h-3 text-[#C5A059] shrink-0" />
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {QUICK_WORDS.map((item, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleSend(item.query)}
+              disabled={isLoading}
+              className="px-2 py-0.5 rounded-full bg-white/[0.03] hover:bg-[#C5A059]/15 border border-white/5 text-white/50 hover:text-[#DFC386] text-[10px] font-medium whitespace-nowrap transition-all cursor-pointer disabled:opacity-40"
             >
-              <span>{lang.label}</span>
-              <span className="opacity-50 text-[10px]">({lang.script})</span>
+              {item.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* 3. Curated Quick Inquiries Pill Strip */}
-      <div className="px-4 py-2 bg-[#181818]/60 border-b border-white/5 overflow-x-auto no-scrollbar flex items-center gap-2 shrink-0">
-        <span className="text-[10px] uppercase font-bold text-[#C5A059] tracking-wider shrink-0 flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-[#C5A059]" />
-          <span>Quick Words:</span>
-        </span>
-        {CURATED_TOPICS.flatMap((c) => c.words).map((item, idx) => (
-          <button
-            key={idx}
-            id={`chip-guru-sample-${idx}`}
-            onClick={() => handleSend(item.query)}
-            disabled={isLoading}
-            className="px-2.5 py-1 rounded-full bg-white/5 hover:bg-[#C5A059]/20 hover:border-[#C5A059]/40 border border-white/10 text-white/75 hover:text-[#DFC386] text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer disabled:opacity-50"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {/* 4. Chat Messages Feed */}
+      {/* Messages */}
       <div
         ref={chatScrollRef}
-        className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-4 text-sm leading-relaxed"
+        className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-5 text-sm leading-relaxed"
       >
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
@@ -421,256 +390,164 @@ Synonyms: Term, Concept, Principle, Meaning`,
           return (
             <div
               key={msg.id}
-              className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`}
+              className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`}
             >
               {!isUser && (
                 <div
-                  className="w-8 h-8 rounded-full bg-cover bg-center border border-[#C5A059]/60 shrink-0 mt-1 shadow"
+                  className="w-7 h-7 rounded-full bg-cover bg-center border border-[#C5A059]/40 shrink-0 mt-0.5"
                   style={{ backgroundImage: `url('${avatarUrl}')` }}
                 />
               )}
 
-              <div
-                className={`max-w-[94%] sm:max-w-[88%] rounded-2xl shadow-lg ${
-                  isUser
-                    ? 'bg-[#C5A059] text-black font-medium p-3.5 rounded-tr-xs'
-                    : 'bg-[#181818] border border-white/10 text-white/90 rounded-tl-xs p-4 sm:p-5 space-y-3'
-                }`}
-              >
+              <div className={`max-w-[85%] ${isUser ? '' : 'flex-1'}`}>
                 {isUser ? (
-                  <div>
-                    <div className="flex items-center gap-1.5 text-black/70 text-[10px] uppercase font-bold tracking-wider mb-0.5">
-                      <Search className="w-3 h-3" />
-                      <span>Word Inquiry</span>
+                  <div className="bg-[#1A1A1A] border border-white/10 rounded-2xl rounded-tr-sm px-4 py-2.5">
+                    <p className="text-sm text-white/90">{msg.text}</p>
+                  </div>
+                ) : entry?.isOutOfScope ? (
+                  <div className="bg-amber-500/[0.06] border border-amber-500/20 rounded-xl p-3.5 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-[10px] uppercase tracking-wider">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>Scope Notice</span>
                     </div>
-                    <p className="text-sm font-semibold">{msg.text}</p>
-                    <span className="text-[9.5px] opacity-60 block text-right mt-1">
-                      {msg.timestamp}
-                    </span>
+                    <p className="text-white/80 text-xs leading-relaxed">
+                      I am a dictionary bot and can only help with word meanings and language usage. This question is out of scope.
+                    </p>
+                  </div>
+                ) : entry && (entry.word || entry.simpleDefinition) ? (
+                  /* Flowing prose-style dictionary entry */
+                  <div className="space-y-2.5">
+                    {entry.simpleDefinition && (
+                      <p className="text-[13px] sm:text-sm text-white/85 leading-relaxed">
+                        {entry.word && (
+                          <span className="text-[#DFC386] font-serif italic font-medium">{entry.word}: </span>
+                        )}
+                        {entry.simpleDefinition}
+                        {entry.word && (
+                          <button
+                            onClick={() => handlePronounce(entry.word, msg.id)}
+                            className={`inline-flex items-center justify-center ml-1.5 p-1 rounded-full align-middle text-[#C5A059]/70 hover:text-[#C5A059] hover:bg-white/5 transition-all cursor-pointer ${isPlayingId === msg.id ? 'text-[#C5A059] animate-pulse' : ''
+                              }`}
+                            title="Pronounce word"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </p>
+                    )}
+
+                    {entry.inOtherWords && (
+                      <div className="pl-3 border-l-2 border-[#C5A059]/30">
+                        <span className="text-[9px] uppercase font-bold text-white/30 tracking-wider block mb-0.5">
+                          In Other Words
+                        </span>
+                        <p className="text-xs text-[#DFC386]/90 italic leading-relaxed">
+                          "{entry.inOtherWords}"
+                        </p>
+                      </div>
+                    )}
+
+                    {entry.exampleSentences && entry.exampleSentences.length > 0 && (
+                      <div className="space-y-1 pt-0.5">
+                        <span className="text-[9px] uppercase font-bold text-white/30 tracking-wider flex items-center gap-1">
+                          <Quote className="w-2.5 h-2.5" />
+                          Example
+                        </span>
+                        {entry.exampleSentences.map((sent, sIdx) => (
+                          <p key={sIdx} className="text-xs text-white/60 leading-relaxed pl-1">
+                            {sent}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {entry.synonyms && entry.synonyms.length > 0 && (
+                      <p className="text-[11px] text-white/35 pt-0.5">
+                        <span className="uppercase tracking-wider font-semibold">Synonyms: </span>
+                        {entry.synonyms.map((syn, synIdx) => (
+                          <React.Fragment key={synIdx}>
+                            <button
+                              onClick={() => handleSend(syn.replace(/\(.*?\)/g, '').trim())}
+                              className="text-[#C5A059]/80 hover:text-[#C5A059] hover:underline cursor-pointer"
+                            >
+                              {syn}
+                            </button>
+                            {synIdx < entry.synonyms.length - 1 && <span>, </span>}
+                          </React.Fragment>
+                        ))}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-1 text-[10px] text-white/25">
+                      <button
+                        onClick={() => handleCopyText(msg.text, msg.id)}
+                        className="hover:text-white/60 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                      {msg.sources && msg.sources.length > 0 && (
+                        <a
+                          href={msg.sources[0].url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-white/60 transition-colors flex items-center gap-1"
+                        >
+                          <span>{msg.sources[0].title}</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                      <span className="ml-auto">{msg.timestamp}</span>
+                    </div>
                   </div>
                 ) : (
-                  <>
-                    {/* Header Bar */}
-                    <div className="flex items-center justify-between border-b border-white/10 pb-2 text-[11px] text-white/50">
-                      <span className="flex items-center gap-1.5 text-[#DFC386] font-semibold tracking-wide">
-                        <BookOpen className="w-3.5 h-3.5 text-[#C5A059]" />
-                        <span>Dictionary Entry</span>
-                      </span>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleCopyText(msg.text, msg.id)}
-                          className="hover:text-white transition-colors p-1 rounded hover:bg-white/5 cursor-pointer flex items-center gap-1 text-[10.5px]"
-                          title="Copy dictionary entry"
-                        >
-                          {copiedId === msg.id ? (
-                            <>
-                              <Check className="w-3 h-3 text-emerald-400" />
-                              <span className="text-emerald-400">Copied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3 h-3" />
-                              <span>Copy</span>
-                            </>
-                          )}
-                        </button>
-                        <span>{msg.timestamp}</span>
-                      </div>
-                    </div>
-
-                    {/* Out of Scope Warning Notice */}
-                    {entry?.isOutOfScope ? (
-                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 space-y-2">
-                        <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs uppercase tracking-wider">
-                          <AlertCircle className="w-4 h-4 shrink-0" />
-                          <span>Scope Notice</span>
-                        </div>
-                        <p className="text-white/90 text-xs sm:text-sm font-medium leading-relaxed">
-                          "I am a dictionary bot and can only help with word meanings and language usage. This question is out of scope."
-                        </p>
-                        <p className="text-white/50 text-[11px] pt-1 border-t border-amber-500/15">
-                          💡 Please enter any classical or modern word (e.g. <em>Dharma, Ahimsa, Yoga, Satya, Serendipity, Ephemeral</em>) to inspect its definition, pronunciation, examples, and synonyms.
-                        </p>
-                      </div>
-                    ) : entry && (entry.word || entry.simpleDefinition) ? (
-                      /* Exact Structured Dictionary Card */
-                      <div className="space-y-3 pt-1">
-                        {/* Word Hero & Part of Speech & Audio */}
-                        <div className="bg-[#201D16] border border-[#C5A059]/35 rounded-xl p-3.5 sm:p-4 shadow-inner flex items-start justify-between">
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {entry.partOfSpeech && (
-                                <span className="px-2 py-0.5 rounded bg-[#C5A059]/20 border border-[#C5A059]/30 text-[#C5A059] text-[10px] font-bold tracking-wider uppercase">
-                                  {entry.partOfSpeech}
-                                </span>
-                              )}
-                              {entry.pronunciation && (
-                                <span className="text-[11px] text-[#DFC386] font-mono">
-                                  /{entry.pronunciation.replace(/^\[|\]$/g, '')}/
-                                </span>
-                              )}
-                            </div>
-
-                            <h3 className="font-serif text-2xl sm:text-3xl font-bold text-white tracking-wide pt-0.5">
-                              {entry.word || 'Word Entry'}
-                            </h3>
-                          </div>
-
-                          {/* Audio Pronunciation Button */}
-                          {entry.word && (
-                            <button
-                              onClick={() => handlePronounce(entry.word, msg.id)}
-                              className={`p-2.5 rounded-xl border border-[#C5A059]/40 bg-[#C5A059]/10 text-[#DFC386] hover:bg-[#C5A059]/20 hover:text-white transition-all cursor-pointer shadow-md flex items-center gap-1.5 ${
-                                isPlayingId === msg.id
-                                  ? 'ring-2 ring-[#C5A059] animate-pulse bg-[#C5A059]/20 text-[#C5A059]'
-                                  : ''
-                              }`}
-                              title="Pronounce word"
-                            >
-                              <Volume2 className="w-4 h-4" />
-                              <span className="text-[10px] font-semibold hidden sm:inline">Listen</span>
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Simple Definition */}
-                        {entry.simpleDefinition && (
-                          <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-[#C5A059] tracking-wider block">
-                              Simple Definition
-                            </span>
-                            <p className="text-xs sm:text-sm text-white/95 leading-relaxed font-normal">
-                              {entry.simpleDefinition}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* In Other Words */}
-                        {entry.inOtherWords && (
-                          <div className="p-3 rounded-xl bg-[#161616] border border-white/10 space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider block">
-                              In Other Words
-                            </span>
-                            <p className="text-xs text-[#DFC386] font-medium leading-relaxed">
-                              "{entry.inOtherWords}"
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Example Sentences */}
-                        {entry.exampleSentences && entry.exampleSentences.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider flex items-center gap-1">
-                              <Quote className="w-3 h-3 text-[#C5A059]" />
-                              <span>Example Sentences</span>
-                            </span>
-                            <div className="space-y-1.5">
-                              {entry.exampleSentences.map((sent, sIdx) => (
-                                <div
-                                  key={sIdx}
-                                  className="flex items-start gap-2 p-2.5 rounded-lg bg-black/30 border border-white/5 text-xs text-white/85 leading-relaxed"
-                                >
-                                  <span className="text-[#C5A059] font-bold shrink-0 mt-0.5">•</span>
-                                  <span>{sent}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Synonyms */}
-                        {entry.synonyms && entry.synonyms.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider block">
-                              Synonyms (Click to explore)
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {entry.synonyms.map((syn, synIdx) => {
-                                const cleanTerm = syn.replace(/\(.*?\)/g, '').trim();
-                                return (
-                                  <button
-                                    key={synIdx}
-                                    onClick={() => handleSend(cleanTerm)}
-                                    className="px-2.5 py-1 rounded-md bg-white/5 hover:bg-[#C5A059]/20 border border-white/10 hover:border-[#C5A059]/40 text-xs text-[#DFC386] hover:text-white transition-all cursor-pointer flex items-center gap-1"
-                                  >
-                                    <span>{syn}</span>
-                                    <ChevronRight className="w-2.5 h-2.5 opacity-50" />
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Clean Markdown Renderer */
-                      <div className="prose prose-invert prose-xs sm:prose-sm max-w-none text-white/85 leading-relaxed space-y-2">
-                        <ReactMarkdown>{msg.text}</ReactMarkdown>
-                      </div>
-                    )}
-
-                    {/* Verified Reference */}
-                    {msg.sources && msg.sources.length > 0 && !entry?.isOutOfScope && (
-                      <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-white/40">
-                        <span>Lexicon Source:</span>
-                        <div className="flex items-center gap-2">
-                          {msg.sources.map((src, sIdx) => (
-                            <a
-                              key={sIdx}
-                              href={src.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[#C5A059] hover:text-[#DFC386] transition-colors"
-                            >
-                              <span>{src.title}</span>
-                              <ExternalLink className="w-2.5 h-2.5 opacity-60" />
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  <div className="prose prose-invert prose-xs sm:prose-sm max-w-none text-white/80 leading-relaxed">
+                    <ReactMarkdown>{msg.text}</ReactMarkdown>
+                  </div>
                 )}
               </div>
             </div>
           );
         })}
 
-        {/* Loading Pulse */}
         {isLoading && (
-          <div className="flex gap-3 justify-start animate-in fade-in">
+          <div className="flex gap-2.5 justify-start animate-in fade-in">
             <div
-              className="w-8 h-8 rounded-full bg-cover bg-center border border-[#C5A059]/60 shrink-0 shadow animate-pulse"
+              className="w-7 h-7 rounded-full bg-cover bg-center border border-[#C5A059]/40 shrink-0 animate-pulse"
               style={{ backgroundImage: `url('${avatarUrl}')` }}
             />
-            <div className="bg-[#181818] border border-white/10 rounded-2xl rounded-tl-xs p-4 text-xs text-white/70 flex items-center gap-3">
-              <div className="flex gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-bounce" />
+            <div className="flex items-center gap-2 pt-1.5">
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce" />
               </div>
-              <span className="italic text-[#DFC386]">
-                Consulting dictionary lexicons for precise definition & usage...
-              </span>
+              <span className="text-xs italic text-white/40">Consulting the lexicon...</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* 5. Search & Inquiry Input Bar */}
-      <div className="p-3 sm:p-4 bg-[#161616] border-t border-white/10 shrink-0 space-y-2">
-        {/* Recent Search Chips */}
+      {/* Input */}
+      <div className="p-3 sm:p-4 border-t border-white/10 shrink-0 space-y-2">
         {recentSearches.length > 0 && (
-          <div className="flex items-center gap-1.5 text-[10.5px] text-white/40 overflow-x-auto no-scrollbar">
-            <History className="w-3 h-3 text-[#C5A059] shrink-0" />
-            <span className="shrink-0">Recent:</span>
+          <div className="flex items-center gap-1.5 text-[10px] text-white/30 overflow-x-auto no-scrollbar">
+            <History className="w-3 h-3 shrink-0" />
             {recentSearches.map((rec, rIdx) => (
               <button
                 key={rIdx}
                 onClick={() => handleSend(rec)}
                 disabled={isLoading}
-                className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-white/60 hover:text-white shrink-0 cursor-pointer transition-colors"
+                className="px-1.5 py-0.5 rounded bg-white/[0.03] hover:bg-white/[0.08] text-white/50 hover:text-white shrink-0 cursor-pointer transition-colors"
               >
                 {rec}
               </button>
@@ -683,53 +560,46 @@ Synonyms: Term, Concept, Principle, Meaning`,
             e.preventDefault();
             handleSend();
           }}
-          className="relative flex items-center"
+          className="relative flex items-center gap-2"
         >
-          <div className="absolute left-3.5 text-[#C5A059] pointer-events-none">
-            <Search className="w-4 h-4" />
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-white/30 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              ref={inputRef}
+              id="input-ask-guru-query"
+              type="text"
+              value={inputQuery}
+              onChange={(e) => setInputQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isLoading}
+              placeholder="Ask about a word, phrase, or philosophical concept..."
+              className="w-full bg-[#0F0F0F] border border-white/10 focus:border-[#C5A059]/50 rounded-full pl-9 pr-4 py-2.5 text-xs sm:text-sm text-white placeholder:text-white/30 focus:outline-hidden transition-all"
+            />
+            {inputQuery && (
+              <button
+                type="button"
+                onClick={() => setInputQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          <input
-            ref={inputRef}
-            id="input-ask-guru-query"
-            type="text"
-            value={inputQuery}
-            onChange={(e) => setInputQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading}
-            placeholder="Enter any word or phrase (e.g. Dharma, Karma, Ahimsa, Yoga, Satya, Moksha)..."
-            className="w-full bg-[#0F0F0F] border border-white/15 focus:border-[#C5A059] rounded-xl pl-10 pr-24 py-3 text-xs sm:text-sm text-white placeholder:text-white/40 focus:outline-hidden transition-all shadow-inner"
-          />
-
-          {inputQuery && (
-            <button
-              type="button"
-              onClick={() => setInputQuery('')}
-              className="absolute right-16 p-1 text-white/40 hover:text-white cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          <div className="absolute right-2 flex items-center gap-1.5">
-            <button
-              id="btn-submit-guru-query"
-              type="submit"
-              disabled={!inputQuery.trim() || isLoading}
-              className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-[#DFC386] to-[#C5A059] hover:brightness-110 text-black text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer shadow-md"
-            >
-              <span>Define</span>
-              <Send className="w-3 h-3" />
-            </button>
-          </div>
+          <button
+            id="btn-submit-guru-query"
+            type="submit"
+            disabled={!inputQuery.trim() || isLoading}
+            className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#DFC386] to-[#C5A059] hover:brightness-110 text-black text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer shrink-0"
+          >
+            <span>Ask</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </form>
 
-        <div className="flex items-center justify-between text-[10px] text-white/40 px-1">
-          <span className="flex items-center gap-1">
-            <Info className="w-3 h-3 text-[#C5A059]" />
-            <span>Strict scope: Word definitions, pronunciation, example sentences & synonyms</span>
-          </span>
-          <span className="hidden sm:inline">Press Enter ↵ to look up</span>
+        <div className="flex items-center gap-1 text-[9.5px] text-white/25 px-1">
+          <Info className="w-2.5 h-2.5" />
+          <span>Strict scope: word definitions, pronunciation, examples & synonyms</span>
         </div>
       </div>
     </section>

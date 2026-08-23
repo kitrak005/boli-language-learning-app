@@ -51,6 +51,16 @@ export default function App() {
     }
   };
 
+  // Central map from tradition id -> its setState function. Used so that
+  // any logic which needs to update "whichever tree is currently active"
+  // (e.g. unlocking the next node on lesson completion) automatically
+  // works for all three traditions instead of only Sanskrit.
+  const treeSetters: Record<TraditionId, React.Dispatch<React.SetStateAction<SkillNode[]>>> = {
+    sanskrit: setSanskritTree,
+    pali: setPaliTree,
+    tamil: setTamilTree,
+  };
+
   const handleSelectTradition = (id: TraditionId) => {
     setCurrentTraditionId(id);
   };
@@ -85,9 +95,12 @@ export default function App() {
       };
     });
 
-    // Unlock next node in tree
-    if (currentTraditionId === 'sanskrit') {
-      setSanskritTree((prev) => {
+    // Unlock next node in whichever tradition's tree is currently active.
+    // Previously this only ran for 'sanskrit', so completing a lesson in
+    // Pali or Tamil updated XP but silently left the next node locked.
+    const setActiveTree = treeSetters[currentTraditionId];
+    if (setActiveTree) {
+      setActiveTree((prev) => {
         const next = [...prev];
         const activeIdx = next.findIndex((n) => n.status === 'active');
         if (activeIdx >= 0) {

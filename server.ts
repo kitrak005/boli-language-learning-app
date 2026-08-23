@@ -21,7 +21,7 @@ function getAIClient(): GoogleGenAI | null {
     if (apiKey) {
       aiClient = new GoogleGenAI({ apiKey });
     } else {
-      console.warn('[VAKYA] GEMINI_API_KEY is not set — Ask Guru will use offline fallback responses only.');
+      console.error('[VAKYA] GEMINI_API_KEY is not set — Ask Guru will use offline fallback responses only.');
     }
   }
   return aiClient;
@@ -271,10 +271,29 @@ const FALLBACK_WORDS: Record<string, {
   }
 };
 
+// Builds the language-context instruction for the prompt. Previously, whatever
+// value came from the frontend (including "all") was interpolated directly
+// into the prompt as-is, so "all" was silently passed through with no real
+// meaning to the model. This now gives Gemini an explicit instruction for
+// each case.
+function buildLanguageInstruction(language: string): string {
+  switch (language) {
+    case 'sanskrit':
+      return 'The word is from Sanskrit specifically — define it in that context.';
+    case 'pali':
+      return 'The word is from Pali specifically — define it in that context.';
+    case 'tamil':
+      return 'The word is from Classical Tamil specifically — define it in that context.';
+    case 'all':
+    default:
+      return 'No specific tradition was selected — first identify which classical tradition (Sanskrit, Pali, or Classical Tamil) the word most likely belongs to, then define it in that context.';
+  }
+}
+
 // API Endpoint for Ask Guru
 app.post('/api/ask-guru', async (req, res) => {
   try {
-    const { query, language = 'sanskrit' } = req.body;
+    const { query, language = 'all' } = req.body;
 
     if (!query || typeof query !== 'string' || !query.trim()) {
       return res.status(400).json({ error: 'Please provide a word or term to ask the Guru.' });
@@ -305,6 +324,9 @@ Scope Rule:
 You MUST ONLY answer queries asking for the definition, meaning, usage, or explanation of a specific word or phrase. If a user asks a question unrelated to defining a word or phrase (e.g., general knowledge, math, coding, personal advice, news, or task execution), you must refuse to answer and respond strictly with:
 "I am a dictionary bot and can only help with word meanings and language usage. This question is out of scope."
 
+Accuracy Rule:
+Never invent an etymology, root, or scriptural citation you are not confident about. If you are unsure of the precise verse or textual source, say the general tradition or context instead of fabricating a specific citation. It is better to give a shorter, honest answer than a detailed but invented one.
+
 Response Structure for Valid Queries:
 For every valid word or phrase requested, format your response using this exact layout:
 Word: [Word (include script / IAST if Sanskrit/Pali/Tamil)]
@@ -319,14 +341,35 @@ Synonyms: [3-4 common synonyms]
 
 Do not deviate from this layout for valid word queries.`;
 
-        const userPrompt = `Define and explain: "${trimmedQuery}". (Language context if relevant: ${language})`;
+        const languageInstruction = buildLanguageInstruction(language);
+        const userPrompt = `Define and explain: "${trimmedQuery}". ${languageInstruction}`;
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `${systemPrompt}\n\n${userPrompt}`,
-        });
+        // Try the newest model first, then fall back to the stable GA model if it's
+        // temporarily overloaded or unavailable. gemini-3-pro-preview is EXPIRED
+        // (retired March 9, 2026) — do not use it. gemini-3.7-flash is current as
+        // of August 2026; gemini-3.6-flash is the prior stable GA fallback.
+        const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash'];
+        let textOutput = '';
+        let lastError: any = null;
 
-        const textOutput = response.text || '';
+        for (const modelName of modelsToTry) {
+          try {
+            const response = await ai.models.generateContent({
+              model: modelName,
+              contents: `${systemPrompt}\n\n${userPrompt}`,
+            });
+            textOutput = response.text || '';
+            lastError = null;
+            break;
+          } catch (attemptError: any) {
+            lastError = attemptError;
+            console.error(`[VAKYA] Gemini model "${modelName}" failed:`, attemptError.message);
+          }
+        }
+
+        if (lastError) {
+          throw lastError;
+        }
 
         return res.json({
           isRedirect: textOutput.includes('out of scope'),
@@ -337,7 +380,7 @@ Do not deviate from this layout for valid word queries.`;
           ],
         });
       } catch (geminiError: any) {
-        console.warn('Gemini API query failed, falling back to rich scholar lexicon:', geminiError.message);
+        console.error('[VAKYA] All Gemini models failed, falling back to offline lexicon:', geminiError.message);
       }
     }
 
@@ -365,28 +408,21 @@ Synonyms: ${matched.synonyms.slice(0, 4).join(', ')}`;
       });
     }
 
-    // Generic fallback for any other word
-    const genericResponse = `Word: ${trimmedQuery}
-Part of Speech: Noun / Concept
-Pronunciation: ${trimmedQuery}
-Simple Definition: A foundational term in linguistic and classical philosophy denoting essential values, actions, or knowledge.
-In Other Words: Core principle of thought and righteous living.
-Example Sentences:
-• The scholar contemplated the profound significance of ${trimmedQuery} across ancient texts.
-• Understanding the deeper meaning of ${trimmedQuery} enriches one's philosophical study.
-Synonyms: Meaning, Principle, Concept, Truth`;
-
+    // Honest fallback for words we can't actually define — previously this
+    // generated a fake-looking templated "definition" (e.g. "A foundational
+    // term in linguistic and classical philosophy...") for ANY unmatched
+    // input, which looked like a real answer but was meaningless boilerplate.
+    // Now it's explicit that the lookup failed, so it can't be mistaken for
+    // a genuine (if wrong) definition.
     return res.json({
       isRedirect: false,
       query: trimmedQuery,
-      response: genericResponse,
-      sources: [
-        { title: 'Monier-Williams Sanskrit Lexicon', url: 'https://www.sanskrit-lexicon.uni-koeln.de/' }
-      ]
+      response: `I wasn't able to look up "${trimmedQuery}" right now — the live lexicon service is temporarily unavailable, and this term isn't in my offline dictionary yet. Please try again in a moment, or try one of the Quick Words above.`,
+      sources: []
     });
 
   } catch (error: any) {
-    console.error('Error in /api/ask-guru:', error);
+    console.error('[VAKYA] Error in /api/ask-guru:', error);
     res.status(500).json({
       error: 'An error occurred while inquiring with the Guru.',
       details: error.message
