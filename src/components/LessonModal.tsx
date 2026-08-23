@@ -1,26 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, Heart, Volume2, Sparkles, CheckCircle2, AlertCircle, ArrowRight, RotateCcw, Award } from 'lucide-react';
-import { Exercise, SkillNode, WordTile } from '../types';
+import { Exercise, SkillNode, WordTile, TraditionId } from '../types';
 import { sound } from '../utils/audio';
 import { IndianTeacher, GuruEmotion } from './IndianTeacher';
 
 interface LessonModalProps {
   node: SkillNode;
+  currentTraditionId: TraditionId;
   onClose: () => void;
   onCompleteLesson: (xpEarned: number) => void;
 }
 
-export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompleteLesson }) => {
+export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTraditionId, onClose, onCompleteLesson }) => {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [hearts, setHearts] = useState(3);
-  const [placedWords, setPlacedWords] = useState<WordTile[]>([]);
+  // Each placed tile gets a unique instanceId so the same word can be placed
+  // more than once (needed whenever correctSequence repeats a word id, e.g.
+  // "X and X"). Previously placedWords only tracked WordTile objects keyed
+  // by their shared word.id, which both disabled re-clicking the same tile
+  // AND made it impossible to render/remove duplicate copies independently.
+  const [placedWords, setPlacedWords] = useState<{ instanceId: string; word: WordTile }[]>([]);
   const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [isCompleted, setIsCompleted] = useState(false);
   const [totalXpEarned, setTotalXpEarned] = useState(0);
   const [teacherEmotion, setTeacherEmotion] = useState<GuruEmotion>('idle');
   const [teacherTip, setTeacherTip] = useState<string>('Listen to each sacred term and arrange in harmony.');
 
-  // Fallback default exercise if none provided in node
   const defaultExercise: Exercise = {
     id: 'default-ex',
     type: 'translate',
@@ -43,38 +48,65 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
   const exercises = node.exercises.length > 0 ? node.exercises : [defaultExercise];
   const currentExercise = exercises[currentExerciseIndex] || defaultExercise;
 
+  // Shuffle the word bank ONCE per exercise (keyed on currentExerciseIndex),
+  // not on every render — otherwise tiles would visibly reorder themselves
+  // every time the component re-renders (e.g. after placing a tile), which
+  // would be janky and confusing. Previously wordBank was rendered in its
+  // original authored order, which listed correct-sequence words first
+  // followed by distractors — trivially revealing the answer by position.
+  const shuffledWordBank = useMemo(() => {
+    const arr = [...currentExercise.wordBank];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentExerciseIndex]);
+
   const progressPercent = Math.round(((currentExerciseIndex + 1) / exercises.length) * 100);
 
   const handlePlaceWord = (word: WordTile) => {
     if (feedbackStatus !== 'idle') return;
-    if (placedWords.some((w) => w.id === word.id)) return;
+    if (placedWords.length >= currentExercise.correctSequence.length) return;
 
     sound.unlockAudio();
     sound.playTileClick();
     setTeacherEmotion('speaking');
     sound.speak(
       word.script,
-      'sanskrit',
+      currentTraditionId,
       () => setTeacherEmotion('speaking'),
       () => setTeacherEmotion('idle'),
       word.transliteration
     );
-    setPlacedWords([...placedWords, word]);
+    const instanceId = `${word.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setPlacedWords([...placedWords, { instanceId, word }]);
   };
 
-  const handleRemoveWord = (wordId: string) => {
+  const handleRemoveWord = (instanceId: string) => {
     if (feedbackStatus !== 'idle') return;
     sound.playTileClick();
-    setPlacedWords(placedWords.filter((w) => w.id !== wordId));
+    setPlacedWords(placedWords.filter((p) => p.instanceId !== instanceId));
   };
 
   const handleCheck = () => {
     if (placedWords.length === 0 || feedbackStatus !== 'idle') return;
 
-    const placedIds = placedWords.map((w) => w.id);
+    // Compare by the actual word content (script), not the exact wordBank
+    // object id. When a word repeats in a sentence (e.g. "X and X"),
+    // wordBank often has two separate entries with different ids so both
+    // copies can be placed independently — but since both tiles look and
+    // sound identical to the learner, checking raw ids positionally would
+    // unfairly fail a visually-correct answer just because the "wrong"
+    // (but identical-looking) instance was used in a given slot.
+    const wordBankById = new Map(currentExercise.wordBank.map((w) => [w.id, w]));
+    const correctScripts = currentExercise.correctSequence.map((id) => wordBankById.get(id)?.script);
+    const placedScripts = placedWords.map((p) => p.word.script);
+
     const isCorrect =
-      placedIds.length === currentExercise.correctSequence.length &&
-      placedIds.every((id, idx) => id === currentExercise.correctSequence[idx]);
+      placedScripts.length === correctScripts.length &&
+      placedScripts.every((script, idx) => script === correctScripts[idx]);
 
     if (isCorrect) {
       sound.playSuccessChime();
@@ -118,7 +150,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
     setTeacherEmotion('speaking');
     sound.speak(
       textToSpeak,
-      'sanskrit',
+      currentTraditionId,
       () => setTeacherEmotion('speaking'),
       () => setTeacherEmotion('idle'),
       currentExercise.targetTransliteration
@@ -194,11 +226,11 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
           {/* Construction Area */}
           <div className="w-full min-h-[110px] sm:min-h-[128px] flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 p-4 sm:p-6 bg-[#121212] border border-white/10 rounded-2xl mb-6 sm:mb-8 shadow-2xl">
             {/* Active Placed Tiles */}
-            {placedWords.map((word) => (
+            {placedWords.map(({ instanceId, word }) => (
               <div
-                key={word.id}
-                id={`placed-tile-${word.id}`}
-                onClick={() => handleRemoveWord(word.id)}
+                key={instanceId}
+                id={`placed-tile-${instanceId}`}
+                onClick={() => handleRemoveWord(instanceId)}
                 className="h-16 px-4 sm:px-5 bg-[#1C1C1E] border border-[#C5A059]/40 rounded-xl flex flex-col items-center justify-center cursor-pointer shadow-md relative overflow-hidden group hover:border-rose-500 transition-all"
               >
                 <span className="text-2xl leading-tight text-white font-serif">
@@ -225,22 +257,34 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, onClose, onCompl
             ))}
           </div>
 
-          {/* Word Bank Tiles */}
+          {/* Word Bank Tiles — shuffled per exercise. Tiles stay clickable even
+              after being placed, so the same word can be used more than once
+              when the target sentence repeats it (e.g. "X and X"). A small
+              badge shows how many times a tile is currently placed, and tiles
+              only disable once all slots for this exercise are filled. */}
           <div className="w-full flex flex-wrap items-center justify-center gap-2.5 sm:gap-4">
-            {currentExercise.wordBank.map((word) => {
-              const isPlaced = placedWords.some((w) => w.id === word.id);
+            {shuffledWordBank.map((word) => {
+              const usageCount = placedWords.filter((p) => p.word.id === word.id).length;
+              const allSlotsFilled = placedWords.length >= currentExercise.correctSequence.length;
 
               return (
                 <button
                   key={word.id}
                   id={`word-bank-${word.id}`}
                   onClick={() => handlePlaceWord(word)}
-                  disabled={isPlaced}
-                  className={`h-[68px] sm:h-[72px] px-5 sm:px-8 rounded-xl flex flex-col items-center justify-center transition-all ${isPlaced
+                  disabled={allSlotsFilled}
+                  className={`relative h-[68px] sm:h-[72px] px-5 sm:px-8 rounded-xl flex flex-col items-center justify-center transition-all ${allSlotsFilled
                     ? 'bg-white/[0.02] text-white/20 opacity-30 cursor-not-allowed border border-white/5'
-                    : 'bg-[#161616] border border-white/15 text-white hover:border-[#C5A059] hover:bg-[#1E1E1E] active:scale-95 cursor-pointer group shadow-lg'
+                    : usageCount > 0
+                      ? 'bg-[#1A1A1A] border border-[#C5A059]/50 text-white hover:border-[#C5A059] active:scale-95 cursor-pointer group shadow-lg'
+                      : 'bg-[#161616] border border-white/15 text-white hover:border-[#C5A059] hover:bg-[#1E1E1E] active:scale-95 cursor-pointer group shadow-lg'
                     }`}
                 >
+                  {usageCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#C5A059] text-[#0A0A0A] text-[10px] font-bold flex items-center justify-center shadow-md">
+                      {usageCount}
+                    </span>
+                  )}
                   <span className="text-xl sm:text-[26px] leading-tight text-white group-hover:text-[#C5A059] font-serif transition-colors">
                     {word.script}
                   </span>

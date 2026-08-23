@@ -102,10 +102,10 @@ export const LearnView: React.FC<LearnViewProps> = ({
                 id={`level-tab-${level}`}
                 onClick={() => setSelectedLevel(level)}
                 className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${isSelected
-                    ? 'bg-[#C5A059] text-black shadow-md'
-                    : reachable
-                      ? 'bg-white/5 text-white/70 hover:text-white hover:bg-white/10 border border-white/10'
-                      : 'bg-white/[0.02] text-white/25 border border-white/5'
+                  ? 'bg-[#C5A059] text-black shadow-md'
+                  : reachable
+                    ? 'bg-white/5 text-white/70 hover:text-white hover:bg-white/10 border border-white/10'
+                    : 'bg-white/[0.02] text-white/25 border border-white/5'
                   }`}
               >
                 {!reachable && <Lock className="w-3 h-3" />}
@@ -176,10 +176,10 @@ export const LearnView: React.FC<LearnViewProps> = ({
 
                 <div
                   className={`mt-3 text-center transition-all duration-200 ${isActive
-                      ? 'bg-[#161616] px-6 py-3.5 rounded-xl border border-[#C5A059] shadow-xl w-4/5 relative'
-                      : isCompleted
-                        ? 'bg-[#121212] px-4 py-2.5 rounded-lg border border-white/15 shadow-sm w-3/4 group-hover:border-[#C5A059]/40'
-                        : 'bg-[#121212]/60 px-4 py-2.5 rounded-lg border border-white/5 w-3/4'
+                    ? 'bg-[#161616] px-6 py-3.5 rounded-xl border border-[#C5A059] shadow-xl w-4/5 relative'
+                    : isCompleted
+                      ? 'bg-[#121212] px-4 py-2.5 rounded-lg border border-white/15 shadow-sm w-3/4 group-hover:border-[#C5A059]/40'
+                      : 'bg-[#121212]/60 px-4 py-2.5 rounded-lg border border-white/5 w-3/4'
                     } ${offsetClass}`}
                 >
                   {isActive && (
@@ -188,10 +188,10 @@ export const LearnView: React.FC<LearnViewProps> = ({
 
                   <h3
                     className={`text-[10px] uppercase tracking-[0.2em] font-semibold mb-0.5 ${isActive
-                        ? 'text-[#C5A059]'
-                        : isCompleted
-                          ? 'text-white'
-                          : 'text-white/40'
+                      ? 'text-[#C5A059]'
+                      : isCompleted
+                        ? 'text-white'
+                        : 'text-white/40'
                       }`}
                   >
                     {node.title}
@@ -199,10 +199,10 @@ export const LearnView: React.FC<LearnViewProps> = ({
 
                   <p
                     className={`text-xs ${isActive
-                        ? 'text-white/90 font-medium'
-                        : isCompleted
-                          ? 'text-white/60'
-                          : 'text-white/30'
+                      ? 'text-white/90 font-medium'
+                      : isCompleted
+                        ? 'text-white/60'
+                        : 'text-white/30'
                       }`}
                   >
                     {node.subtitle}

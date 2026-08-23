@@ -51,16 +51,6 @@ export default function App() {
     }
   };
 
-  // Central map from tradition id -> its setState function. Used so that
-  // any logic which needs to update "whichever tree is currently active"
-  // (e.g. unlocking the next node on lesson completion) automatically
-  // works for all three traditions instead of only Sanskrit.
-  const treeSetters: Record<TraditionId, React.Dispatch<React.SetStateAction<SkillNode[]>>> = {
-    sanskrit: setSanskritTree,
-    pali: setPaliTree,
-    tamil: setTamilTree,
-  };
-
   const handleSelectTradition = (id: TraditionId) => {
     setCurrentTraditionId(id);
   };
@@ -95,22 +85,29 @@ export default function App() {
       };
     });
 
-    // Unlock next node in whichever tradition's tree is currently active.
-    // Previously this only ran for 'sanskrit', so completing a lesson in
-    // Pali or Tamil updated XP but silently left the next node locked.
-    const setActiveTree = treeSetters[currentTraditionId];
-    if (setActiveTree) {
-      setActiveTree((prev) => {
-        const next = [...prev];
-        const activeIdx = next.findIndex((n) => n.status === 'active');
-        if (activeIdx >= 0) {
-          next[activeIdx] = { ...next[activeIdx], status: 'completed' };
-          if (activeIdx + 1 < next.length) {
-            next[activeIdx + 1] = { ...next[activeIdx + 1], status: 'active', iconType: 'play' };
-          }
+    // Unlock next node in tree — previously this ONLY ran for Sanskrit
+    // (`if (currentTraditionId === 'sanskrit')`), so completing a lesson in
+    // Pali or Tamil updated XP correctly but never unlocked the next node,
+    // leaving those trees permanently stuck after the first lesson. This now
+    // applies the same unlock logic to whichever tree is currently active.
+    const advanceTree = (prev: SkillNode[]): SkillNode[] => {
+      const next = [...prev];
+      const activeIdx = next.findIndex((n) => n.status === 'active');
+      if (activeIdx >= 0) {
+        next[activeIdx] = { ...next[activeIdx], status: 'completed' };
+        if (activeIdx + 1 < next.length) {
+          next[activeIdx + 1] = { ...next[activeIdx + 1], status: 'active', iconType: 'play' };
         }
-        return next;
-      });
+      }
+      return next;
+    };
+
+    if (currentTraditionId === 'sanskrit') {
+      setSanskritTree(advanceTree);
+    } else if (currentTraditionId === 'pali') {
+      setPaliTree(advanceTree);
+    } else if (currentTraditionId === 'tamil') {
+      setTamilTree(advanceTree);
     }
   };
 
@@ -200,7 +197,7 @@ export default function App() {
               </p>
             </div>
             <AskGuruChat
-              avatarUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuBLrH8Elz2mqY6dXtArekdpYXztbyNOblniZhIMx2X_EsanRotXyGWKndqom2k3S32qegVH_51PaLZt2KqhJMEszqSLhiutVPoFbzRLmLWgET7lhZWcZmkpfFRohO4ELb_zK94-NhYdc5mtzkhxdOuy04XA9Pgvf8GiGU39O1EKkR3FP6imNDJSLQ-n16Y89RolR5R3BB1kp85c_-1KaLonHRr9_vFdP-yJeNprpPh5lMzifCjFHCxbJA"
+              avatarUrl="/assets/guru-avatar.png"
               scholarName="Guru Vidyadhar"
               currentLanguage={currentTraditionId}
             />
@@ -231,6 +228,7 @@ export default function App() {
       {activeLessonNode && (
         <LessonModal
           node={activeLessonNode}
+          currentTraditionId={currentTraditionId}
           onClose={() => setActiveLessonNode(null)}
           onCompleteLesson={handleCompleteLesson}
         />
