@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TopAppBar } from './components/TopAppBar';
 import { BottomNavBar } from './components/BottomNavBar';
 import { HomeView } from './components/HomeView';
@@ -27,15 +27,53 @@ import { sound } from './utils/audio';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
-  const [currentTraditionId, setCurrentTraditionId] = useState<TraditionId>('sanskrit');
+  // Persistence: previously all progress lived only in React state, which
+  // reset to the hardcoded starting point (Level 1 nodes pre-completed,
+  // everything else locked) on every page refresh — meaning a learner could
+  // never actually reach Level 2/3 content unless they finished every
+  // remaining node in one uninterrupted session. These lazy initializers
+  // restore saved progress from localStorage if it exists.
+  const loadSaved = <T,>(key: string, fallback: T): T => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? (JSON.parse(saved) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const [currentTraditionId, setCurrentTraditionId] = useState<TraditionId>(() =>
+    loadSaved('vakya_currentTraditionId', 'sanskrit' as TraditionId)
+  );
   const [isTraditionModalOpen, setIsTraditionModalOpen] = useState(false);
   const [activeLessonNode, setActiveLessonNode] = useState<SkillNode | null>(null);
   const [showLevelUpModal, setShowLevelUpModal] = useState<boolean>(false);
 
-  const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
-  const [sanskritTree, setSanskritTree] = useState<SkillNode[]>(SANSKRIT_SKILL_TREE);
-  const [paliTree, setPaliTree] = useState<SkillNode[]>(PALI_SKILL_TREE);
-  const [tamilTree, setTamilTree] = useState<SkillNode[]>(TAMIL_SKILL_TREE);
+  const [profile, setProfile] = useState<UserProfile>(() => loadSaved('vakya_profile', INITIAL_PROFILE));
+  const [sanskritTree, setSanskritTree] = useState<SkillNode[]>(() => loadSaved('vakya_sanskritTree', SANSKRIT_SKILL_TREE));
+  const [paliTree, setPaliTree] = useState<SkillNode[]>(() => loadSaved('vakya_paliTree', PALI_SKILL_TREE));
+  const [tamilTree, setTamilTree] = useState<SkillNode[]>(() => loadSaved('vakya_tamilTree', TAMIL_SKILL_TREE));
+
+  // Persist to localStorage whenever any of this progress changes.
+  useEffect(() => {
+    localStorage.setItem('vakya_currentTraditionId', JSON.stringify(currentTraditionId));
+  }, [currentTraditionId]);
+
+  useEffect(() => {
+    localStorage.setItem('vakya_profile', JSON.stringify(profile));
+  }, [profile]);
+
+  useEffect(() => {
+    localStorage.setItem('vakya_sanskritTree', JSON.stringify(sanskritTree));
+  }, [sanskritTree]);
+
+  useEffect(() => {
+    localStorage.setItem('vakya_paliTree', JSON.stringify(paliTree));
+  }, [paliTree]);
+
+  useEffect(() => {
+    localStorage.setItem('vakya_tamilTree', JSON.stringify(tamilTree));
+  }, [tamilTree]);
 
   const currentTradition: LanguageTradition =
     TRADITIONS.find((t) => t.id === currentTraditionId) || TRADITIONS[0];
@@ -64,15 +102,11 @@ export default function App() {
   };
 
   const handleCompleteLesson = (xpEarned: number) => {
-    setProfile((prev) => {
-      const nextDaily = Math.min(prev.maxDailyXp, prev.dailyXp + 8);
-      const justAchievedGoal = nextDaily >= prev.maxDailyXp && prev.dailyXp < prev.maxDailyXp;
+    let justAchievedGoal = false;
 
-      if (justAchievedGoal) {
-        setTimeout(() => {
-          setShowLevelUpModal(true);
-        }, 600);
-      }
+    setProfile((prev) => {
+      const nextDaily = Math.min(prev.maxDailyXp, prev.dailyXp + xpEarned);
+      justAchievedGoal = nextDaily >= prev.maxDailyXp && prev.dailyXp < prev.maxDailyXp;
 
       return {
         ...prev,
@@ -84,6 +118,12 @@ export default function App() {
         },
       };
     });
+
+    if (justAchievedGoal) {
+      setTimeout(() => {
+        setShowLevelUpModal(true);
+      }, 600);
+    }
 
     // Unlock next node in tree — previously this ONLY ran for Sanskrit
     // (`if (currentTraditionId === 'sanskrit')`), so completing a lesson in
@@ -112,15 +152,19 @@ export default function App() {
   };
 
   const handleEarnXp = (amount: number) => {
-    setProfile((prev) => {
-      const nextDaily = Math.min(prev.maxDailyXp, prev.dailyXp + 5);
-      const justAchievedGoal = nextDaily >= prev.maxDailyXp && prev.dailyXp < prev.maxDailyXp;
+    // IMPORTANT: side effects (setTimeout) must never live inside a setState
+    // updater function — React may invoke updaters more than once (e.g. in
+    // Strict Mode during development) as a safety check, which can cause the
+    // side effect to fire inconsistently or appear "delayed until the next
+    // interaction," exactly like the modal timing bug this fixes.
+    let justAchievedGoal = false;
 
-      if (justAchievedGoal) {
-        setTimeout(() => {
-          setShowLevelUpModal(true);
-        }, 500);
-      }
+    setProfile((prev) => {
+      // Previously this always added a hardcoded +5 regardless of the actual
+      // amount earned (e.g. Picture Quiz awards +10 XP per correct answer),
+      // so daily-goal progress didn't match the XP actually being earned.
+      const nextDaily = Math.min(prev.maxDailyXp, prev.dailyXp + amount);
+      justAchievedGoal = nextDaily >= prev.maxDailyXp && prev.dailyXp < prev.maxDailyXp;
 
       return {
         ...prev,
@@ -128,6 +172,12 @@ export default function App() {
         dailyXp: nextDaily,
       };
     });
+
+    if (justAchievedGoal) {
+      setTimeout(() => {
+        setShowLevelUpModal(true);
+      }, 500);
+    }
   };
 
   return (

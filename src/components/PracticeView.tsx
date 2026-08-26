@@ -18,6 +18,7 @@ import { FLASHCARDS_DECK } from '../data/mockData';
 import { sound } from '../utils/audio';
 import { IndianTeacher, GuruEmotion } from './IndianTeacher';
 import { PronunciationCoach } from './PronunciationCoach';
+import { PictureQuizGame } from './PictureQuizGame';
 import { SpeechRecognitionResultData } from '../utils/speechRecognition';
 
 interface PracticeViewProps {
@@ -129,7 +130,7 @@ const VOICE_LAB_CATALOG: VoiceLabItem[] = [
 ];
 
 export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, onEarnXp }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'flashcards' | 'voicelab' | 'alphabet'>('flashcards');
+  const [activeSubTab, setActiveSubTab] = useState<'flashcards' | 'voicelab' | 'alphabet' | 'picturequiz'>('flashcards');
   const [cardIndex, setCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [showSpeechCoachOnCard, setShowSpeechCoachOnCard] = useState(false);
@@ -270,7 +271,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
         />
       </div>
 
-      {/* Sub-Tabs: Flashcards | Voice Lab | Script Explorer */}
+      {/* Sub-Tabs: Flashcards | Voice Lab | Script Explorer | Picture Quiz */}
       <div className="flex justify-center">
         <div className="bg-[#141414] p-1 rounded-xl flex flex-wrap gap-1 border border-white/10 max-w-full justify-center">
           <button
@@ -279,11 +280,10 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
               sound.playTileClick();
               setActiveSubTab('flashcards');
             }}
-            className={`px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${
-              activeSubTab === 'flashcards'
+            className={`px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${activeSubTab === 'flashcards'
                 ? 'bg-[#C5A059] text-[#0A0A0A] font-bold shadow-md shadow-[#C5A059]/20'
                 : 'text-white/50 hover:text-white'
-            }`}
+              }`}
           >
             Flashcards
           </button>
@@ -294,11 +294,10 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
               sound.playTileClick();
               setActiveSubTab('voicelab');
             }}
-            className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${
-              activeSubTab === 'voicelab'
+            className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${activeSubTab === 'voicelab'
                 ? 'bg-[#C5A059] text-[#0A0A0A] font-bold shadow-md shadow-[#C5A059]/20'
                 : 'text-white/50 hover:text-white'
-            }`}
+              }`}
           >
             <Mic className="w-3.5 h-3.5" />
             <span>Voice Lab</span>
@@ -310,13 +309,27 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
               sound.playTileClick();
               setActiveSubTab('alphabet');
             }}
-            className={`px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${
-              activeSubTab === 'alphabet'
+            className={`px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${activeSubTab === 'alphabet'
                 ? 'bg-[#C5A059] text-[#0A0A0A] font-bold shadow-md shadow-[#C5A059]/20'
                 : 'text-white/50 hover:text-white'
-            }`}
+              }`}
           >
             Script Explorer
+          </button>
+
+          <button
+            id="tab-btn-picturequiz"
+            onClick={() => {
+              sound.playTileClick();
+              setActiveSubTab('picturequiz');
+            }}
+            className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${activeSubTab === 'picturequiz'
+                ? 'bg-[#C5A059] text-[#0A0A0A] font-bold shadow-md shadow-[#C5A059]/20'
+                : 'text-white/50 hover:text-white'
+              }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Picture Quiz</span>
           </button>
         </div>
       </div>
@@ -358,11 +371,10 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
                       setShowSpeechCoachOnCard(!showSpeechCoachOnCard);
                     }}
                     title="Speak and Assess Pronunciation with Microphone"
-                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
-                      showSpeechCoachOnCard
+                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${showSpeechCoachOnCard
                         ? 'bg-[#C5A059] text-black border-[#C5A059]'
                         : 'bg-white/5 border-white/10 text-[#C5A059] hover:bg-white/10'
-                    }`}
+                      }`}
                   >
                     <Mic className="w-3.5 h-3.5" />
                     <span>{showSpeechCoachOnCard ? 'Hide Mic' : 'Speak'}</span>
@@ -529,18 +541,16 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
                       sound.playTileClick();
                       setSelectedVoiceLabItem(item);
                     }}
-                    className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
-                      isSelected
+                    className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${isSelected
                         ? 'bg-[#C5A059]/15 border-[#C5A059] shadow-lg shadow-[#C5A059]/10'
                         : 'bg-[#151515] border-white/10 hover:border-white/20 hover:bg-[#1A1A1A]'
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span
-                          className={`text-[10px] font-bold uppercase tracking-wider ${
-                            isSelected ? 'text-[#C5A059]' : 'text-white/40'
-                          }`}
+                          className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? 'text-[#C5A059]' : 'text-white/40'
+                            }`}
                         >
                           {item.traditionId}
                         </span>
@@ -660,6 +670,11 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 4: AI-Generated Picture Vocabulary Quiz */}
+      {activeSubTab === 'picturequiz' && (
+        <PictureQuizGame currentTraditionId={currentTraditionId} onEarnXp={onEarnXp} />
       )}
     </div>
   );
