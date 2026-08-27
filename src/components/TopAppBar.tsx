@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Globe2, Volume2, VolumeX } from 'lucide-react';
+import { BookOpen, Globe2, Volume2, VolumeX, LogOut } from 'lucide-react';
 import { LanguageTradition } from '../types';
 import { sound } from '../utils/audio';
 
@@ -9,6 +9,7 @@ interface TopAppBarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onOpenTraditions: () => void;
+  onSignOut: () => void;
 }
 
 export const TopAppBar: React.FC<TopAppBarProps> = ({
@@ -17,6 +18,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   activeTab,
   onTabChange,
   onOpenTraditions,
+  onSignOut,
 }) => {
   const [isMuted, setIsMuted] = useState(sound.getIsMuted());
 
@@ -67,8 +69,8 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
             id={`nav-link-${item.id}`}
             onClick={() => onTabChange(item.id)}
             className={`text-xs uppercase tracking-[0.15em] font-medium transition-all duration-200 px-3.5 py-1.5 rounded-lg cursor-pointer ${activeTab === item.id
-              ? 'text-[#C5A059] bg-white/[0.06] border border-[#C5A059]/30 font-semibold shadow-xs'
-              : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
+                ? 'text-[#C5A059] bg-white/[0.06] border border-[#C5A059]/30 font-semibold shadow-xs'
+                : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
               }`}
           >
             {item.label}
@@ -104,6 +106,15 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           <span>{streakDays}</span>
           <span className="text-sm">🔥</span>
         </div>
+
+        <button
+          id="btn-sign-out"
+          onClick={onSignOut}
+          title="Sign Out"
+          className="p-2 rounded-full bg-white/[0.04] border border-white/10 text-white/50 hover:text-rose-400 hover:border-rose-400/30 hover:bg-rose-950/20 transition-colors cursor-pointer"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+        </button>
       </div>
     </header>
   );

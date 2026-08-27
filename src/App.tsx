@@ -15,6 +15,9 @@ import { AskGuruChat } from './components/AskGuruChat';
 import { TraditionSelectModal } from './components/TraditionSelectModal';
 import { LessonModal } from './components/LessonModal';
 import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
+import { AuthScreen } from './components/AuthScreen';
+import { supabase } from './utils/supabaseClient';
+import type { Session } from '@supabase/supabase-js';
 import {
   TRADITIONS,
   INITIAL_PROFILE,
@@ -26,6 +29,31 @@ import { LanguageTradition, SkillNode, TraditionId, UserProfile } from './types'
 import { sound } from './utils/audio';
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    // Check for an existing session on load (e.g. returning user, or just
+    // completed an OAuth redirect back from Google/GitHub).
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      console.log('[VAKYA DEBUG] getSession() result:', session, 'error:', error);
+      setSession(session);
+      setIsCheckingAuth(false);
+    });
+
+    // Keep session state in sync with login/logout/token refresh events.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[VAKYA DEBUG] onAuthStateChange fired:', event, session);
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   const [activeTab, setActiveTab] = useState<string>('home');
   // Persistence: previously all progress lived only in React state, which
   // reset to the hardcoded starting point (Level 1 nodes pre-completed,
@@ -180,6 +208,18 @@ export default function App() {
     }
   };
 
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#C5A059]/30 border-t-[#C5A059] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white dark-noise-bg sans selection:bg-[#C5A059] selection:text-black flex flex-col justify-between">
       {/* Top Application Bar */}
@@ -192,6 +232,7 @@ export default function App() {
           setActiveTab(tab);
         }}
         onOpenTraditions={() => setIsTraditionModalOpen(true)}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Area with fluid max-width */}
