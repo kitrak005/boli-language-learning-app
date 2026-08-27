@@ -15,7 +15,7 @@ import { AskGuruChat } from './components/AskGuruChat';
 import { TraditionSelectModal } from './components/TraditionSelectModal';
 import { LessonModal } from './components/LessonModal';
 import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
-import { AuthFlow } from './components/AuthFlow';
+import { AuthScreen } from './components/AuthScreen';
 import { supabase } from './utils/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -35,20 +35,58 @@ export default function App() {
   useEffect(() => {
     // Check for an existing session on load (e.g. returning user, or just
     // completed an OAuth redirect back from Google/GitHub).
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      console.log('[VAKYA DEBUG] getSession() result:', session, 'error:', error);
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsCheckingAuth(false);
     });
 
     // Keep session state in sync with login/logout/token refresh events.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[VAKYA DEBUG] onAuthStateChange fired:', event, session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Real streak tracking — previously profile.streakDays was just a static
+  // number from the initial mock data (always "1"), with no logic anywhere
+  // that actually checked calendar dates. This computes the real streak by
+  // comparing today's date against the last day the user was recorded active:
+  // - Same day as last visit → no change (already counted today)
+  // - Exactly one day after last visit → streak continues, +1
+  // - A gap of more than one day → streak resets to 1
+  // - No prior record at all (first-ever visit) → streak starts at 1
+  useEffect(() => {
+    if (!session) return; // only track streaks once actually logged in
+
+    const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    const lastActiveStr = localStorage.getItem('vakya_lastActiveDate');
+
+    if (lastActiveStr === todayStr) {
+      return; // already counted today, nothing to do
+    }
+
+    let newStreak = 1;
+
+    if (lastActiveStr) {
+      const lastActive = new Date(lastActiveStr + 'T00:00:00');
+      const today = new Date(todayStr + 'T00:00:00');
+      const dayDiff = Math.round((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (dayDiff === 1) {
+        // Consecutive day — continue the streak using whatever was last saved
+        const savedStreak = parseInt(localStorage.getItem('vakya_streakDays') || '1', 10);
+        newStreak = savedStreak + 1;
+      }
+      // dayDiff === 0 already handled above; dayDiff > 1 means a gap, so
+      // newStreak stays at the default of 1 (streak reset).
+    }
+
+    localStorage.setItem('vakya_lastActiveDate', todayStr);
+    localStorage.setItem('vakya_streakDays', String(newStreak));
+
+    setProfile((prev) => ({ ...prev, streakDays: newStreak }));
+  }, [session]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -217,7 +255,7 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthFlow />;
+    return <AuthScreen />;
   }
 
   return (
