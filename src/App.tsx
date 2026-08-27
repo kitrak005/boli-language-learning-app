@@ -15,7 +15,7 @@ import { AskGuruChat } from './components/AskGuruChat';
 import { TraditionSelectModal } from './components/TraditionSelectModal';
 import { LessonModal } from './components/LessonModal';
 import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
-import { AuthScreen } from './components/AuthScreen';
+import { AuthFlow } from './components/AuthFlow';
 import { supabase } from './utils/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -217,7 +217,7 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen />;
+    return <AuthFlow />;
   }
 
   return (
