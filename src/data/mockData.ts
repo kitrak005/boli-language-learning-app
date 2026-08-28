@@ -112,10 +112,10 @@ export const SANSKRIT_SKILL_TREE: SkillNode[] = [
     levelNumber: 1,
     title: 'GREETINGS',
     subtitle: 'Namaste',
-    status: 'completed',
-    iconType: 'check',
+    status: 'active',
+    iconType: 'play',
     alignment: 'center',
-    progressPercentage: 100,
+    progressPercentage: 0,
     exercises: [
       {
         id: 'ex-1-1',
@@ -141,10 +141,10 @@ export const SANSKRIT_SKILL_TREE: SkillNode[] = [
     levelNumber: 1,
     title: 'INTRODUCING YOURSELF',
     subtitle: 'Aham',
-    status: 'completed',
-    iconType: 'star',
+    status: 'locked',
+    iconType: 'lock',
     alignment: 'left',
-    progressPercentage: 100,
+    progressPercentage: 0,
     exercises: [
       {
         id: 'ex-2-1',
@@ -170,10 +170,10 @@ export const SANSKRIT_SKILL_TREE: SkillNode[] = [
     levelNumber: 1,
     title: 'YES, NO & BASIC RESPONSES',
     subtitle: 'Am / Na',
-    status: 'active',
-    iconType: 'play',
+    status: 'locked',
+    iconType: 'lock',
     alignment: 'right',
-    progressPercentage: 65,
+    progressPercentage: 0,
     exercises: [
       {
         id: 'ex-3-1',

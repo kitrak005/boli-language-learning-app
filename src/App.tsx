@@ -48,6 +48,42 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  const [activeTab, setActiveTab] = useState<string>('home');
+
+  // Storage is now scoped per logged-in user (via their Supabase user ID),
+  // not shared globally across every account on the same browser. Previously
+  // all keys were flat strings like 'vakya_profile', so switching accounts
+  // on the same device would show one user's progress to another. userId is
+  // null until the session resolves, so storageKey() safely no-ops (returns
+  // null) until then — callers check for that.
+  const userId = session?.user?.id ?? null;
+  const storageKey = (base: string): string | null => (userId ? `vakya_${userId}_${base}` : null);
+
+  const loadSaved = <T,>(key: string | null, fallback: T): T => {
+    if (!key) return fallback;
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? (JSON.parse(saved) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const [currentTraditionId, setCurrentTraditionId] = useState<TraditionId>('sanskrit');
+  const [isTraditionModalOpen, setIsTraditionModalOpen] = useState(false);
+  const [activeLessonNode, setActiveLessonNode] = useState<SkillNode | null>(null);
+  const [showLevelUpModal, setShowLevelUpModal] = useState<boolean>(false);
+
+  const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
+  const [sanskritTree, setSanskritTree] = useState<SkillNode[]>(SANSKRIT_SKILL_TREE);
+  const [paliTree, setPaliTree] = useState<SkillNode[]>(PALI_SKILL_TREE);
+  const [tamilTree, setTamilTree] = useState<SkillNode[]>(TAMIL_SKILL_TREE);
+  const [hasLoadedForUser, setHasLoadedForUser] = useState<string | null>(null);
+
   // Real streak tracking — previously profile.streakDays was just a static
   // number from the initial mock data (always "1"), with no logic anywhere
   // that actually checked calendar dates. This computes the real streak by
@@ -56,11 +92,17 @@ export default function App() {
   // - Exactly one day after last visit → streak continues, +1
   // - A gap of more than one day → streak resets to 1
   // - No prior record at all (first-ever visit) → streak starts at 1
+  // Waits for hasLoadedForUser to match, so it never runs against the
+  // transient default profile before this user's real saved data has loaded.
   useEffect(() => {
-    if (!session) return; // only track streaks once actually logged in
+    if (!session || hasLoadedForUser !== userId) return;
+
+    const lastActiveKey = storageKey('lastActiveDate');
+    const streakKey = storageKey('streakDays');
+    if (!lastActiveKey || !streakKey) return;
 
     const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
-    const lastActiveStr = localStorage.getItem('vakya_lastActiveDate');
+    const lastActiveStr = localStorage.getItem(lastActiveKey);
 
     if (lastActiveStr === todayStr) {
       return; // already counted today, nothing to do
@@ -74,72 +116,86 @@ export default function App() {
       const dayDiff = Math.round((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
 
       if (dayDiff === 1) {
-        // Consecutive day — continue the streak using whatever was last saved
-        const savedStreak = parseInt(localStorage.getItem('vakya_streakDays') || '1', 10);
+        const savedStreak = parseInt(localStorage.getItem(streakKey) || '1', 10);
         newStreak = savedStreak + 1;
       }
-      // dayDiff === 0 already handled above; dayDiff > 1 means a gap, so
-      // newStreak stays at the default of 1 (streak reset).
     }
 
-    localStorage.setItem('vakya_lastActiveDate', todayStr);
-    localStorage.setItem('vakya_streakDays', String(newStreak));
+    localStorage.setItem(lastActiveKey, todayStr);
+    localStorage.setItem(streakKey, String(newStreak));
 
     setProfile((prev) => ({ ...prev, streakDays: newStreak }));
-  }, [session]);
+  }, [session, userId, hasLoadedForUser]);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
+  // Once the real user ID is known, load THIS user's saved progress (if any)
+  // — or, for a genuinely brand-new account, start completely fresh and sync
+  // their real name/email into the profile instead of showing the hardcoded
+  // "Ananda M." placeholder from the mock data.
+  useEffect(() => {
+    if (!userId || hasLoadedForUser === userId) return;
 
-  const [activeTab, setActiveTab] = useState<string>('home');
-  // Persistence: previously all progress lived only in React state, which
-  // reset to the hardcoded starting point (Level 1 nodes pre-completed,
-  // everything else locked) on every page refresh — meaning a learner could
-  // never actually reach Level 2/3 content unless they finished every
-  // remaining node in one uninterrupted session. These lazy initializers
-  // restore saved progress from localStorage if it exists.
-  const loadSaved = <T,>(key: string, fallback: T): T => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved ? (JSON.parse(saved) as T) : fallback;
-    } catch {
-      return fallback;
+    const savedProfile = loadSaved<UserProfile | null>(storageKey('profile'), null);
+
+    if (savedProfile) {
+      setProfile(savedProfile);
+    } else {
+      // Brand-new account — build a real starting profile from their actual
+      // Supabase user data instead of the generic mock default.
+      const user = session?.user;
+      const displayName =
+        user?.user_metadata?.name ||
+        user?.user_metadata?.full_name ||
+        user?.email?.split('@')[0] ||
+        'Scholar';
+      const avatarUrl = user?.user_metadata?.avatar_url || INITIAL_PROFILE.avatarUrl;
+
+      setProfile({
+        ...INITIAL_PROFILE,
+        name: displayName,
+        avatarUrl,
+        totalXp: 0,
+        streakDays: 0,
+        dailyXp: 0,
+        languageMastery: { sanskrit: 0, pali: 0, tamil: 0 },
+      });
     }
-  };
 
-  const [currentTraditionId, setCurrentTraditionId] = useState<TraditionId>(() =>
-    loadSaved('vakya_currentTraditionId', 'sanskrit' as TraditionId)
-  );
-  const [isTraditionModalOpen, setIsTraditionModalOpen] = useState(false);
-  const [activeLessonNode, setActiveLessonNode] = useState<SkillNode | null>(null);
-  const [showLevelUpModal, setShowLevelUpModal] = useState<boolean>(false);
+    setCurrentTraditionId(loadSaved(storageKey('currentTraditionId'), 'sanskrit' as TraditionId));
+    setSanskritTree(loadSaved(storageKey('sanskritTree'), SANSKRIT_SKILL_TREE));
+    setPaliTree(loadSaved(storageKey('paliTree'), PALI_SKILL_TREE));
+    setTamilTree(loadSaved(storageKey('tamilTree'), TAMIL_SKILL_TREE));
+    setHasLoadedForUser(userId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
-  const [profile, setProfile] = useState<UserProfile>(() => loadSaved('vakya_profile', INITIAL_PROFILE));
-  const [sanskritTree, setSanskritTree] = useState<SkillNode[]>(() => loadSaved('vakya_sanskritTree', SANSKRIT_SKILL_TREE));
-  const [paliTree, setPaliTree] = useState<SkillNode[]>(() => loadSaved('vakya_paliTree', PALI_SKILL_TREE));
-  const [tamilTree, setTamilTree] = useState<SkillNode[]>(() => loadSaved('vakya_tamilTree', TAMIL_SKILL_TREE));
-
-  // Persist to localStorage whenever any of this progress changes.
+  // Persist to localStorage whenever any of this progress changes — only
+  // once we've actually loaded this user's data (avoids overwriting saved
+  // progress with the transient default state during the brief window
+  // before the load effect above runs).
   useEffect(() => {
-    localStorage.setItem('vakya_currentTraditionId', JSON.stringify(currentTraditionId));
-  }, [currentTraditionId]);
-
-  useEffect(() => {
-    localStorage.setItem('vakya_profile', JSON.stringify(profile));
-  }, [profile]);
+    const key = storageKey('currentTraditionId');
+    if (key && hasLoadedForUser === userId) localStorage.setItem(key, JSON.stringify(currentTraditionId));
+  }, [currentTraditionId, userId, hasLoadedForUser]);
 
   useEffect(() => {
-    localStorage.setItem('vakya_sanskritTree', JSON.stringify(sanskritTree));
-  }, [sanskritTree]);
+    const key = storageKey('profile');
+    if (key && hasLoadedForUser === userId) localStorage.setItem(key, JSON.stringify(profile));
+  }, [profile, userId, hasLoadedForUser]);
 
   useEffect(() => {
-    localStorage.setItem('vakya_paliTree', JSON.stringify(paliTree));
-  }, [paliTree]);
+    const key = storageKey('sanskritTree');
+    if (key && hasLoadedForUser === userId) localStorage.setItem(key, JSON.stringify(sanskritTree));
+  }, [sanskritTree, userId, hasLoadedForUser]);
 
   useEffect(() => {
-    localStorage.setItem('vakya_tamilTree', JSON.stringify(tamilTree));
-  }, [tamilTree]);
+    const key = storageKey('paliTree');
+    if (key && hasLoadedForUser === userId) localStorage.setItem(key, JSON.stringify(paliTree));
+  }, [paliTree, userId, hasLoadedForUser]);
+
+  useEffect(() => {
+    const key = storageKey('tamilTree');
+    if (key && hasLoadedForUser === userId) localStorage.setItem(key, JSON.stringify(tamilTree));
+  }, [tamilTree, userId, hasLoadedForUser]);
 
   const currentTradition: LanguageTradition =
     TRADITIONS.find((t) => t.id === currentTraditionId) || TRADITIONS[0];
