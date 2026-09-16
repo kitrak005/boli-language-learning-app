@@ -18,7 +18,6 @@ import { FLASHCARDS_DECK } from '../data/mockData';
 import { sound } from '../utils/audio';
 import { IndianTeacher, GuruEmotion } from './IndianTeacher';
 import { PronunciationCoach } from './PronunciationCoach';
-import { PictureQuizGame } from './PictureQuizGame';
 import { SpeechRecognitionResultData } from '../utils/speechRecognition';
 
 interface PracticeViewProps {
@@ -130,7 +129,7 @@ const VOICE_LAB_CATALOG: VoiceLabItem[] = [
 ];
 
 export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, onEarnXp }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'flashcards' | 'voicelab' | 'alphabet' | 'picturequiz'>('flashcards');
+  const [activeSubTab, setActiveSubTab] = useState<'flashcards' | 'voicelab' | 'alphabet'>('flashcards');
   const [cardIndex, setCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [showSpeechCoachOnCard, setShowSpeechCoachOnCard] = useState(false);
@@ -315,21 +314,6 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
               }`}
           >
             Script Explorer
-          </button>
-
-          <button
-            id="tab-btn-picturequiz"
-            onClick={() => {
-              sound.playTileClick();
-              setActiveSubTab('picturequiz');
-            }}
-            className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${activeSubTab === 'picturequiz'
-                ? 'bg-[#C5A059] text-[#0A0A0A] font-bold shadow-md shadow-[#C5A059]/20'
-                : 'text-white/50 hover:text-white'
-              }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Picture Quiz</span>
           </button>
         </div>
       </div>
@@ -670,11 +654,6 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
             </div>
           )}
         </div>
-      )}
-
-      {/* TAB 4: AI-Generated Picture Vocabulary Quiz */}
-      {activeSubTab === 'picturequiz' && (
-        <PictureQuizGame currentTraditionId={currentTraditionId} onEarnXp={onEarnXp} />
       )}
     </div>
   );
