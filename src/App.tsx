@@ -369,18 +369,7 @@ export default function App() {
         )}
 
         {activeTab === 'askguru' && (
-          <div className="max-w-2xl mx-auto space-y-4">
-            <div className="text-center">
-              <span className="text-[10px] uppercase tracking-[0.25em] font-semibold text-[#C5A059] block mb-1">
-                CLASSICAL LEXICON & WISDOM
-              </span>
-              <h1 className="font-serif text-3xl sm:text-4xl font-normal text-white mb-2 tracking-tight">
-                Ask The Guru
-              </h1>
-              <p className="text-sm sm:text-base text-white/60 font-light max-w-lg mx-auto">
-                Inquire about the meaning, pronunciation, and usage of any classical word or phrase.
-              </p>
-            </div>
+          <div className="max-w-2xl mx-auto">
             <AskGuruChat
               avatarUrl="/assets/guru-avatar.png"
               scholarName="Guru Vidyadhar"

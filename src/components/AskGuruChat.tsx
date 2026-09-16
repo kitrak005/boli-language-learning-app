@@ -87,7 +87,10 @@ function stripMarkdownEmphasis(value: string): string {
 function parseDictionaryResponse(text: string): ParsedDictionaryEntry | null {
   if (!text) return null;
 
-  if (text.includes('out of scope') || text.includes('I am a dictionary bot and can only help with word meanings')) {
+  if (
+    text.includes('out of scope') ||
+    text.includes('I am a dictionary bot and can only help with word meanings')
+  ) {
     return {
       word: '',
       partOfSpeech: '',
@@ -103,9 +106,15 @@ function parseDictionaryResponse(text: string): ParsedDictionaryEntry | null {
   const wordMatch = text.match(/Word:\s*(.+)/i);
   const posMatch = text.match(/Part of Speech:\s*(.+)/i);
   const pronMatch = text.match(/Pronunciation:\s*(.+)/i);
-  const defMatch = text.match(/Simple Definition:\s*([\s\S]+?)(?=\n\s*(?:In Other Words|Example Sentences|Synonyms|$))/i);
-  const inOtherWordsMatch = text.match(/In Other Words:\s*([\s\S]+?)(?=\n\s*(?:Example Sentences|Synonyms|$))/i);
-  const examplesBlockMatch = text.match(/Example Sentences:\s*([\s\S]+?)(?=\n\s*(?:Synonyms|$))/i);
+  const defMatch = text.match(
+    /Simple Definition:\s*([\s\S]+?)(?=\n\s*(?:In Other Words|Example Sentences|Synonyms|$))/i
+  );
+  const inOtherWordsMatch = text.match(
+    /In Other Words:\s*([\s\S]+?)(?=\n\s*(?:Example Sentences|Synonyms|$))/i
+  );
+  const examplesBlockMatch = text.match(
+    /Example Sentences:\s*([\s\S]+?)(?=\n\s*(?:Synonyms|$))/i
+  );
   const synMatch = text.match(/Synonyms:\s*(.+)/i);
 
   if (!wordMatch && !defMatch) {
@@ -149,31 +158,31 @@ export const AskGuruChat: React.FC<AskGuruChatProps> = ({
   scholarName = 'Dictionary Bot',
   currentLanguage = 'sanskrit',
 }) => {
-  const [selectedLang, setSelectedLang] = useState<string>('all');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome-msg',
-      sender: 'guru',
-      text: `Word: Dharma (धर्म / Dhamma)
-Part of Speech: Noun (Philosophical & Ethical Concept)
-Pronunciation: DHEHR-muh
-Simple Definition: The concept of *Dharma* (धर्म) is foundational to Indian philosophy, extending far beyond simple definitions of "religion" or "duty." It refers to the universal cosmic order and sacred ethical duty that upholds and harmonizes all existence.
-In Other Words: Living in righteous alignment with truth and cosmic moral purpose.
-Example Sentences:
-• "धारणाद्धर्म इत्याहुर्धर्मो धारयते प्रजाः ।" (Dharma is that which sustains; it preserves and holds together all beings in harmony.)
-• Practicing compassion, honesty, and responsibility in daily life is an essential expression of one's personal dharma.
-Synonyms: Righteousness, Sacred Duty, Cosmic Law, Virtue`,
-      timestamp: 'Just now',
-    },
-  ]);
-
+  const [selectedLang, setSelectedLang] = useState<string>(
+    currentLanguage && LANGUAGE_FILTERS.some((f) => f.id === currentLanguage)
+      ? currentLanguage
+      : 'all'
+  );
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputQuery, setInputQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isPlayingId, setIsPlayingId] = useState<string | null>(null);
-  const [recentSearches, setRecentSearches] = useState<string[]>(['Dharma', 'Moksha', 'Ahimsa', 'Satya', 'Karma']);
+  const [recentSearches, setRecentSearches] = useState<string[]>([
+    'Dharma',
+    'Moksha',
+    'Ahimsa',
+    'Satya',
+    'Karma',
+  ]);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (currentLanguage && LANGUAGE_FILTERS.some((f) => f.id === currentLanguage)) {
+      setSelectedLang(currentLanguage);
+    }
+  }, [currentLanguage]);
 
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -291,317 +300,382 @@ Synonyms: Term, Concept, Principle, Meaning`,
 
   const handleResetChat = () => {
     sound.playTileClick();
-    setMessages([
-      {
-        id: `welcome-${Date.now()}`,
-        sender: 'guru',
-        text: `I am your dedicated Dictionary Bot. Inquire about any word, term, or phrase to view its exact definition, pronunciation, usage, and synonyms.`,
-        timestamp: 'Just now',
-      },
-    ]);
+    setMessages([]);
+    setInputQuery('');
   };
+
+  const hasMessages = messages.length > 0;
 
   return (
     <section
       id="ask-guru-chatbot-container"
       className="bg-[#121212] rounded-2xl border border-white/10 shadow-2xl flex flex-col h-[680px] overflow-hidden"
     >
-      {/* Header */}
-      <div className="px-5 py-3.5 border-b border-white/10 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div
-              className="w-9 h-9 rounded-full bg-cover bg-center border border-[#C5A059]/50 shrink-0"
-              style={{ backgroundImage: `url('${avatarUrl}')` }}
-            />
-            <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border border-[#121212]" />
-          </div>
+      {!hasMessages ? (
+        /* Empty / Initial State Layout */
+        <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 text-center animate-in fade-in duration-300">
+          <span className="text-[10px] sm:text-xs font-semibold tracking-[0.25em] text-[#C5A059] uppercase block mb-3 font-mono">
+            CLASSICAL LEXICON & WISDOM
+          </span>
+          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-normal text-white mb-3 tracking-tight">
+            Ask The Guru
+          </h2>
+          <p className="text-xs sm:text-sm text-white/50 max-w-md mx-auto mb-8 font-light leading-relaxed">
+            Deep philological meanings, Vedic etymology, and authentic philosophical roots.
+          </p>
 
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <h3 className="font-serif text-sm font-medium text-white tracking-wide">
-                Ask Guru • Dictionary Bot
-              </h3>
-              <span className="px-1.5 py-0.5 rounded bg-[#C5A059]/15 border border-[#C5A059]/30 text-[#C5A059] text-[8.5px] font-bold tracking-wider uppercase">
-                Word Meanings Only
-              </span>
-            </div>
-            <p className="text-[10px] text-white/40 font-light mt-0.5">
-              Definitions • Pronunciation • Example Sentences • Synonyms
-            </p>
-          </div>
-        </div>
-
-        <button
-          id="btn-reset-guru-chat"
-          onClick={handleResetChat}
-          className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
-          title="Clear Conversation"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* Tradition + Quick Words — combined into one compact row */}
-      <div className="px-4 py-2 border-b border-white/5 flex flex-wrap items-center gap-1.5 shrink-0">
-        <Languages className="w-3 h-3 text-[#C5A059] shrink-0" />
-        {LANGUAGE_FILTERS.map((lang) => (
-          <button
-            key={lang.id}
-            onClick={() => {
-              setSelectedLang(lang.id);
-              sound.playTileClick();
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
             }}
-            className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all cursor-pointer ${selectedLang === lang.id
-                ? 'bg-[#C5A059] text-black font-semibold'
-                : 'bg-white/5 text-white/50 hover:text-white'
-              }`}
+            className="w-full max-w-[480px] relative mb-3"
           >
-            {lang.label}
-          </button>
-        ))}
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                ref={inputRef}
+                id="input-ask-guru-empty-query"
+                type="text"
+                value={inputQuery}
+                onChange={(e) => setInputQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                placeholder="Search classical words, roots, or verses..."
+                className="w-full bg-[#0A0A0A] border border-white/15 focus:border-[#C5A059]/60 rounded-full pl-11 pr-24 py-3.5 text-xs sm:text-sm text-white placeholder:text-white/30 focus:outline-hidden transition-all shadow-inner"
+              />
+              {inputQuery && (
+                <button
+                  type="button"
+                  onClick={() => setInputQuery('')}
+                  className="absolute right-20 top-1/2 -translate-y-1/2 text-white/30 hover:text-white cursor-pointer p-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                id="btn-submit-guru-empty-query"
+                type="submit"
+                disabled={!inputQuery.trim() || isLoading}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-4 py-2 rounded-full bg-gradient-to-r from-[#DFC386] to-[#C5A059] hover:brightness-110 text-black text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer shadow-md"
+              >
+                <span>Ask</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </form>
 
-        <span className="w-px h-3.5 bg-white/10 mx-1" />
-
-        <Sparkles className="w-3 h-3 text-[#C5A059] shrink-0" />
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {QUICK_WORDS.map((item, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleSend(item.query)}
-              disabled={isLoading}
-              className="px-2 py-0.5 rounded-full bg-white/[0.03] hover:bg-[#C5A059]/15 border border-white/5 text-white/50 hover:text-[#DFC386] text-[10px] font-medium whitespace-nowrap transition-all cursor-pointer disabled:opacity-40"
-            >
-              {item.label}
-            </button>
-          ))}
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-white/40">
+            <Info className="w-3 h-3 text-white/40 shrink-0" />
+            <span>Strict scope: definitions, pronunciation, etymology & verses</span>
+          </div>
         </div>
-      </div>
-
-      {/* Messages */}
-      <div
-        ref={chatScrollRef}
-        className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-5 text-sm leading-relaxed"
-      >
-        {messages.map((msg) => {
-          const isUser = msg.sender === 'user';
-          const entry = !isUser ? parseDictionaryResponse(msg.text) : null;
-
-          return (
-            <div
-              key={msg.id}
-              className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`}
-            >
-              {!isUser && (
+      ) : (
+        /* Active Conversation State Layout */
+        <>
+          {/* Header */}
+          <div className="px-5 py-3.5 border-b border-white/10 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="relative">
                 <div
-                  className="w-7 h-7 rounded-full bg-cover bg-center border border-[#C5A059]/40 shrink-0 mt-0.5"
+                  className="w-9 h-9 rounded-full bg-cover bg-center border border-[#C5A059]/50 shrink-0"
                   style={{ backgroundImage: `url('${avatarUrl}')` }}
                 />
-              )}
+                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border border-[#121212]" />
+              </div>
 
-              <div className={`max-w-[85%] ${isUser ? '' : 'flex-1'}`}>
-                {isUser ? (
-                  <div className="bg-[#1A1A1A] border border-white/10 rounded-2xl rounded-tr-sm px-4 py-2.5">
-                    <p className="text-sm text-white/90">{msg.text}</p>
-                  </div>
-                ) : entry?.isOutOfScope ? (
-                  <div className="bg-amber-500/[0.06] border border-amber-500/20 rounded-xl p-3.5 space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-[10px] uppercase tracking-wider">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>Scope Notice</span>
-                    </div>
-                    <p className="text-white/80 text-xs leading-relaxed">
-                      I am a dictionary bot and can only help with word meanings and language usage. This question is out of scope.
-                    </p>
-                  </div>
-                ) : entry && (entry.word || entry.simpleDefinition) ? (
-                  /* Flowing prose-style dictionary entry */
-                  <div className="space-y-2.5">
-                    {entry.simpleDefinition && (
-                      <p className="text-[13px] sm:text-sm text-white/85 leading-relaxed">
-                        {entry.word && (
-                          <span className="text-[#DFC386] font-serif italic font-medium">{entry.word}: </span>
-                        )}
-                        {entry.simpleDefinition}
-                        {entry.word && (
-                          <button
-                            onClick={() => handlePronounce(entry.word, msg.id)}
-                            className={`inline-flex items-center justify-center ml-1.5 p-1 rounded-full align-middle text-[#C5A059]/70 hover:text-[#C5A059] hover:bg-white/5 transition-all cursor-pointer ${isPlayingId === msg.id ? 'text-[#C5A059] animate-pulse' : ''
-                              }`}
-                            title="Pronounce word"
-                          >
-                            <Volume2 className="w-3 h-3" />
-                          </button>
-                        )}
-                      </p>
-                    )}
-
-                    {entry.inOtherWords && (
-                      <div className="pl-3 border-l-2 border-[#C5A059]/30">
-                        <span className="text-[9px] uppercase font-bold text-white/30 tracking-wider block mb-0.5">
-                          In Other Words
-                        </span>
-                        <p className="text-xs text-[#DFC386]/90 italic leading-relaxed">
-                          "{entry.inOtherWords}"
-                        </p>
-                      </div>
-                    )}
-
-                    {entry.exampleSentences && entry.exampleSentences.length > 0 && (
-                      <div className="space-y-1 pt-0.5">
-                        <span className="text-[9px] uppercase font-bold text-white/30 tracking-wider flex items-center gap-1">
-                          <Quote className="w-2.5 h-2.5" />
-                          Example
-                        </span>
-                        {entry.exampleSentences.map((sent, sIdx) => (
-                          <p key={sIdx} className="text-xs text-white/60 leading-relaxed pl-1">
-                            {sent}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-
-                    {entry.synonyms && entry.synonyms.length > 0 && (
-                      <p className="text-[11px] text-white/35 pt-0.5">
-                        <span className="uppercase tracking-wider font-semibold">Synonyms: </span>
-                        {entry.synonyms.map((syn, synIdx) => (
-                          <React.Fragment key={synIdx}>
-                            <button
-                              onClick={() => handleSend(syn.replace(/\(.*?\)/g, '').trim())}
-                              className="text-[#C5A059]/80 hover:text-[#C5A059] hover:underline cursor-pointer"
-                            >
-                              {syn}
-                            </button>
-                            {synIdx < entry.synonyms.length - 1 && <span>, </span>}
-                          </React.Fragment>
-                        ))}
-                      </p>
-                    )}
-
-                    <div className="flex items-center gap-3 pt-1 text-[10px] text-white/25">
-                      <button
-                        onClick={() => handleCopyText(msg.text, msg.id)}
-                        className="hover:text-white/60 transition-colors flex items-center gap-1 cursor-pointer"
-                      >
-                        {copiedId === msg.id ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span className="text-emerald-400">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                      {msg.sources && msg.sources.length > 0 && (
-                        <a
-                          href={msg.sources[0].url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-white/60 transition-colors flex items-center gap-1"
-                        >
-                          <span>{msg.sources[0].title}</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
-                      <span className="ml-auto">{msg.timestamp}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="prose prose-invert prose-xs sm:prose-sm max-w-none text-white/80 leading-relaxed">
-                    <ReactMarkdown>{msg.text}</ReactMarkdown>
-                  </div>
-                )}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-serif text-sm font-medium text-white tracking-wide">
+                    Ask Guru • Dictionary Bot
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded bg-[#C5A059]/15 border border-[#C5A059]/30 text-[#C5A059] text-[8.5px] font-bold tracking-wider uppercase">
+                    Word Meanings Only
+                  </span>
+                </div>
+                <p className="text-[10px] text-white/40 font-light mt-0.5">
+                  Definitions • Pronunciation • Example Sentences • Synonyms
+                </p>
               </div>
             </div>
-          );
-        })}
 
-        {isLoading && (
-          <div className="flex gap-2.5 justify-start animate-in fade-in">
-            <div
-              className="w-7 h-7 rounded-full bg-cover bg-center border border-[#C5A059]/40 shrink-0 animate-pulse"
-              style={{ backgroundImage: `url('${avatarUrl}')` }}
-            />
-            <div className="flex items-center gap-2 pt-1.5">
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce" />
-              </div>
-              <span className="text-xs italic text-white/40">Consulting the lexicon...</span>
-            </div>
+            <button
+              id="btn-reset-guru-chat"
+              onClick={handleResetChat}
+              className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+              title="Clear Conversation"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* Input */}
-      <div className="p-3 sm:p-4 border-t border-white/10 shrink-0 space-y-2">
-        {recentSearches.length > 0 && (
-          <div className="flex items-center gap-1.5 text-[10px] text-white/30 overflow-x-auto no-scrollbar">
-            <History className="w-3 h-3 shrink-0" />
-            {recentSearches.map((rec, rIdx) => (
+          {/* Tradition + Quick Words — combined into one compact row */}
+          <div className="px-4 py-2 border-b border-white/5 flex flex-wrap items-center gap-1.5 shrink-0">
+            <Languages className="w-3 h-3 text-[#C5A059] shrink-0" />
+            {LANGUAGE_FILTERS.map((lang) => (
               <button
-                key={rIdx}
-                onClick={() => handleSend(rec)}
-                disabled={isLoading}
-                className="px-1.5 py-0.5 rounded bg-white/[0.03] hover:bg-white/[0.08] text-white/50 hover:text-white shrink-0 cursor-pointer transition-colors"
+                key={lang.id}
+                onClick={() => {
+                  setSelectedLang(lang.id);
+                  sound.playTileClick();
+                }}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all cursor-pointer ${
+                  selectedLang === lang.id
+                    ? 'bg-[#C5A059] text-black font-semibold'
+                    : 'bg-white/5 text-white/50 hover:text-white'
+                }`}
               >
-                {rec}
+                {lang.label}
               </button>
             ))}
-          </div>
-        )}
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="relative flex items-center gap-2"
-        >
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 text-white/30 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              ref={inputRef}
-              id="input-ask-guru-query"
-              type="text"
-              value={inputQuery}
-              onChange={(e) => setInputQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              placeholder="Ask about a word, phrase, or philosophical concept..."
-              className="w-full bg-[#0F0F0F] border border-white/10 focus:border-[#C5A059]/50 rounded-full pl-9 pr-4 py-2.5 text-xs sm:text-sm text-white placeholder:text-white/30 focus:outline-hidden transition-all"
-            />
-            {inputQuery && (
-              <button
-                type="button"
-                onClick={() => setInputQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+            <span className="w-px h-3.5 bg-white/10 mx-1" />
+
+            <Sparkles className="w-3 h-3 text-[#C5A059] shrink-0" />
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {QUICK_WORDS.map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSend(item.query)}
+                  disabled={isLoading}
+                  className="px-2 py-0.5 rounded-full bg-white/[0.03] hover:bg-[#C5A059]/15 border border-white/5 text-white/50 hover:text-[#DFC386] text-[10px] font-medium whitespace-nowrap transition-all cursor-pointer disabled:opacity-40"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div
+            ref={chatScrollRef}
+            className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-5 text-sm leading-relaxed"
+          >
+            {messages.map((msg) => {
+              const isUser = msg.sender === 'user';
+              const entry = !isUser ? parseDictionaryResponse(msg.text) : null;
+
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex gap-2.5 ${
+                    isUser ? 'justify-end' : 'justify-start'
+                  } animate-in fade-in duration-200`}
+                >
+                  {!isUser && (
+                    <div
+                      className="w-7 h-7 rounded-full bg-cover bg-center border border-[#C5A059]/40 shrink-0 mt-0.5"
+                      style={{ backgroundImage: `url('${avatarUrl}')` }}
+                    />
+                  )}
+
+                  <div className={`max-w-[85%] ${isUser ? '' : 'flex-1'}`}>
+                    {isUser ? (
+                      <div className="bg-[#1A1A1A] border border-white/10 rounded-2xl rounded-tr-sm px-4 py-2.5">
+                        <p className="text-sm text-white/90">{msg.text}</p>
+                      </div>
+                    ) : entry?.isOutOfScope ? (
+                      <div className="bg-amber-500/[0.06] border border-amber-500/20 rounded-xl p-3.5 space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-[10px] uppercase tracking-wider">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Scope Notice</span>
+                        </div>
+                        <p className="text-white/80 text-xs leading-relaxed">
+                          I am a dictionary bot and can only help with word meanings and language usage. This question is out of scope.
+                        </p>
+                      </div>
+                    ) : entry && (entry.word || entry.simpleDefinition) ? (
+                      /* Flowing prose-style dictionary entry */
+                      <div className="space-y-2.5">
+                        {entry.simpleDefinition && (
+                          <p className="text-[13px] sm:text-sm text-white/85 leading-relaxed">
+                            {entry.word && (
+                              <span className="text-[#DFC386] font-serif italic font-medium">
+                                {entry.word}:{' '}
+                              </span>
+                            )}
+                            {entry.simpleDefinition}
+                            {entry.word && (
+                              <button
+                                onClick={() => handlePronounce(entry.word, msg.id)}
+                                className={`inline-flex items-center justify-center ml-1.5 p-1 rounded-full align-middle text-[#C5A059]/70 hover:text-[#C5A059] hover:bg-white/5 transition-all cursor-pointer ${
+                                  isPlayingId === msg.id ? 'text-[#C5A059] animate-pulse' : ''
+                                }`}
+                                title="Pronounce word"
+                              >
+                                <Volume2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </p>
+                        )}
+
+                        {entry.inOtherWords && (
+                          <div className="pl-3 border-l-2 border-[#C5A059]/30">
+                            <span className="text-[9px] uppercase font-bold text-white/30 tracking-wider block mb-0.5">
+                              In Other Words
+                            </span>
+                            <p className="text-xs text-[#DFC386]/90 italic leading-relaxed">
+                              "{entry.inOtherWords}"
+                            </p>
+                          </div>
+                        )}
+
+                        {entry.exampleSentences && entry.exampleSentences.length > 0 && (
+                          <div className="space-y-1 pt-0.5">
+                            <span className="text-[9px] uppercase font-bold text-white/30 tracking-wider flex items-center gap-1">
+                              <Quote className="w-2.5 h-2.5" />
+                              Example
+                            </span>
+                            {entry.exampleSentences.map((sent, sIdx) => (
+                              <p key={sIdx} className="text-xs text-white/60 leading-relaxed pl-1">
+                                {sent}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+
+                        {entry.synonyms && entry.synonyms.length > 0 && (
+                          <p className="text-[11px] text-white/35 pt-0.5">
+                            <span className="uppercase tracking-wider font-semibold">Synonyms: </span>
+                            {entry.synonyms.map((syn, synIdx) => (
+                              <React.Fragment key={synIdx}>
+                                <button
+                                  onClick={() => handleSend(syn.replace(/\(.*?\)/g, '').trim())}
+                                  className="text-[#C5A059]/80 hover:text-[#C5A059] hover:underline cursor-pointer"
+                                >
+                                  {syn}
+                                </button>
+                                {synIdx < entry.synonyms.length - 1 && <span>, </span>}
+                              </React.Fragment>
+                            ))}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-3 pt-1 text-[10px] text-white/25">
+                          <button
+                            onClick={() => handleCopyText(msg.text, msg.id)}
+                            className="hover:text-white/60 transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedId === msg.id ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span className="text-emerald-400">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                          {msg.sources && msg.sources.length > 0 && (
+                            <a
+                              href={msg.sources[0].url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-white/60 transition-colors flex items-center gap-1"
+                            >
+                              <span>{msg.sources[0].title}</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                          <span className="ml-auto">{msg.timestamp}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="prose prose-invert prose-xs sm:prose-sm max-w-none text-white/80 leading-relaxed">
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {isLoading && (
+              <div className="flex gap-2.5 justify-start animate-in fade-in">
+                <div
+                  className="w-7 h-7 rounded-full bg-cover bg-center border border-[#C5A059]/40 shrink-0 animate-pulse"
+                  style={{ backgroundImage: `url('${avatarUrl}')` }}
+                />
+                <div className="flex items-center gap-2 pt-1.5">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-bounce" />
+                  </div>
+                  <span className="text-xs italic text-white/40">Consulting the lexicon...</span>
+                </div>
+              </div>
             )}
           </div>
 
-          <button
-            id="btn-submit-guru-query"
-            type="submit"
-            disabled={!inputQuery.trim() || isLoading}
-            className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#DFC386] to-[#C5A059] hover:brightness-110 text-black text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer shrink-0"
-          >
-            <span>Ask</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </form>
+          {/* Bottom Chat Input Bar */}
+          <div className="p-3 sm:p-4 border-t border-white/10 shrink-0 space-y-2">
+            {recentSearches.length > 0 && (
+              <div className="flex items-center gap-1.5 text-[10px] text-white/30 overflow-x-auto no-scrollbar">
+                <History className="w-3 h-3 shrink-0" />
+                {recentSearches.map((rec, rIdx) => (
+                  <button
+                    key={rIdx}
+                    onClick={() => handleSend(rec)}
+                    disabled={isLoading}
+                    className="px-1.5 py-0.5 rounded bg-white/[0.03] hover:bg-white/[0.08] text-white/50 hover:text-white shrink-0 cursor-pointer transition-colors"
+                  >
+                    {rec}
+                  </button>
+                ))}
+              </div>
+            )}
 
-        <div className="flex items-center gap-1 text-[9.5px] text-white/25 px-1">
-          <Info className="w-2.5 h-2.5" />
-          <span>Strict scope: word definitions, pronunciation, examples & synonyms</span>
-        </div>
-      </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="relative flex items-center gap-2"
+            >
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-white/30 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="input-ask-guru-query"
+                  type="text"
+                  value={inputQuery}
+                  onChange={(e) => setInputQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading}
+                  placeholder="Ask about a word, phrase, or philosophical concept..."
+                  className="w-full bg-[#0F0F0F] border border-white/10 focus:border-[#C5A059]/50 rounded-full pl-9 pr-4 py-2.5 text-xs sm:text-sm text-white placeholder:text-white/30 focus:outline-hidden transition-all"
+                />
+                {inputQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setInputQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                id="btn-submit-guru-query"
+                type="submit"
+                disabled={!inputQuery.trim() || isLoading}
+                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#DFC386] to-[#C5A059] hover:brightness-110 text-black text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer shrink-0"
+              >
+                <span>Ask</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </form>
+
+            <div className="flex items-center gap-1 text-[9.5px] text-white/25 px-1">
+              <Info className="w-2.5 h-2.5" />
+              <span>Strict scope: word definitions, pronunciation, examples & synonyms</span>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   );
 };
