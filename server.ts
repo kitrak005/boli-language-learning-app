@@ -445,22 +445,43 @@ app.post('/api/voice-agent', async (req, res) => {
     const trimmedMessage = message.trim();
     const ai = getAIClient();
 
-    const VOICE_GURU_SYSTEM_PROMPT = `You are Guru Vidyadhar, a wise, compassionate master of Indian classical philosophy, Sanskrit, Classical Tamil, and Vedic wisdom in the VĀKYA sanctuary.
-You are interacting with a seeker in real-time spoken audio conversation.
+    // Derive explicit language instruction for the Guru's spoken response
+    const langLabel =
+      language === 'tamil'
+        ? 'Classical Tamil (தமிழ்) using Tamil script'
+        : language === 'pali'
+        ? 'Pali (पालि) using Devanagari script'
+        : language === 'all'
+        ? 'the language in which the Seeker is speaking (Sanskrit/Tamil/Hindi/English)'
+        : 'Sanskrit (संस्कृतम्) using Devanagari script';
+
+    // Build a strict language-enforcement rule block
+    const languageRule =
+      language === 'all'
+        ? `LANGUAGE RULE: Detect the language the Seeker used and reply in that same language. If they asked in Hindi or Sanskrit, reply in Sanskrit/Hindi Devanagari. If in Tamil, reply in Tamil script. If in English, reply in English.`
+        : `LANGUAGE RULE (MANDATORY): You MUST write the "spokenResponse" field in ${langLabel}. This is non-negotiable — do NOT write the spoken response in English unless the language is "all". The Seeker explicitly chose this language. If you cannot construct a full response, write at least 1-2 sentences in ${langLabel} and supplement with a brief English note in "spokenResponseTranslation".`;
+
+    const VOICE_GURU_SYSTEM_PROMPT = `You are Guru Vidyadhar, a wise, compassionate master of Indian classical philosophy, Sanskrit, Classical Tamil, Pali, and Vedic wisdom in the VĀKYA sanctuary.
+You are speaking with a seeker in a real-time voice conversation.
+
+${languageRule}
 
 Key Persona & Voice Guidelines:
 1. Speak with warmth, serenity, and profound insight.
-2. Tone: Gentle, articulate, and conversational (suitable for speech synthesis). Keep spoken responses concise (2-4 sentences max per turn) so the audio conversation remains natural, engaging, and dynamic.
-3. Language flexibility:
-   - Primary tradition context: ${language === 'tamil' ? 'Classical Tamil (தமிழ்)' : language === 'pali' ? 'Pali (पालि)' : 'Sanskrit (संस्कृतम्)'}.
-   - If the user speaks in English, Sanskrit, Tamil, Hindi, or any other language, fully understand their question and respond warmly. You should answer in clear English or the user's spoken tongue, while enriching the answer with authentic classical concepts, roots, or mantras where fitting.
-4. Output Format:
-Return ONLY valid JSON matching this schema:
+2. Tone: Gentle, measured, and conversational (suitable for speech synthesis). Keep spoken responses concise (2–4 sentences) so the audio conversation flows naturally.
+3. The Seeker's selected tradition is: ${langLabel}.
+   - Your "spokenResponse" MUST be written in this language and script.
+   - Always include an English translation of your spoken response in "spokenResponseTranslation" so the seeker can follow along.
+4. If the Seeker asks a question in a different script/language than the chosen tradition, still answer the question — but write your "spokenResponse" in the selected tradition's language.
+
+Output Format:
+Return ONLY valid JSON. No markdown, no extra text, no code fences:
 {
-  "verse": "Short sacred mantra/verse in original Devanagari or Tamil script (or empty if not applicable)",
-  "verseTranslation": "English translation of the verse",
-  "spokenResponse": "Direct, conversational, natural voice response from the Guru to be read aloud",
-  "topic": "Brief 2-3 word topic tag"
+  "verse": "Short sacred mantra or verse in original Devanagari or Tamil script (leave empty string if not applicable)",
+  "verseTranslation": "English translation of the verse above",
+  "spokenResponse": "Your response to the Seeker written in ${langLabel} — this is what will be spoken aloud",
+  "spokenResponseTranslation": "English translation of what you said in spokenResponse",
+  "topic": "2–3 word topic tag in English"
 }`;
 
     if (ai) {
@@ -497,7 +518,8 @@ Return ONLY valid JSON matching this schema:
         return res.json({
           verse: voiceData.verse || 'ॐ शान्तिः शान्तिः शान्तिः',
           verseTranslation: voiceData.verseTranslation || 'May there be peace in all realms.',
-          spokenResponse: voiceData.spokenResponse || `I hear your inquiry regarding "${trimmedMessage}". Stillness of mind reveals eternal truth.`,
+          spokenResponse: voiceData.spokenResponse || `तव प्रश्नः श्रुतः। ज्ञानस्य ज्योतिः सदा प्रकाशते।`,
+          spokenResponseTranslation: voiceData.spokenResponseTranslation || 'Your inquiry has been heard. The light of wisdom always shines.',
           topic: voiceData.topic || 'Spiritual Inquiry',
         });
       }

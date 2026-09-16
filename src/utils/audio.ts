@@ -417,9 +417,11 @@ class SoundEngine {
       }
 
       if (!indianVoice) {
-        // Fallback to phonetic romanization for standard English voices
+        // Fallback: if a caller-supplied English translation was given (customPhonetic),
+        // speak that clearly. Otherwise fall back to phonetic romanisation of Devanagari.
         spokenText = customPhonetic || devanagariToPhonetic(cleanText);
-        targetLangTag = 'en-IN';
+        // Use en-US for the clearest English speech (en-IN can sound robotic)
+        targetLangTag = 'en-US';
       }
 
       const utterance = new SpeechSynthesisUtterance(spokenText);
