@@ -12,6 +12,7 @@ import { ExploreView } from './components/ExploreView';
 import { PracticeView } from './components/PracticeView';
 import { ProfileView } from './components/ProfileView';
 import { AskGuruChat } from './components/AskGuruChat';
+import { VoiceModeView } from './components/VoiceModeView';
 import { TraditionSelectModal } from './components/TraditionSelectModal';
 import { LessonModal } from './components/LessonModal';
 import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
@@ -376,6 +377,14 @@ export default function App() {
               currentLanguage={currentTraditionId}
             />
           </div>
+        )}
+
+        {activeTab === 'voice' && (
+          <VoiceModeView
+            currentTraditionId={currentTraditionId}
+            onBack={() => setActiveTab('home')}
+            onEarnXp={handleEarnXp}
+          />
         )}
 
         {activeTab === 'profile' && <ProfileView profile={profile} />}

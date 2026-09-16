@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { AccessToken } from 'livekit-server-sdk';
 import { createServer as createViteServer } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -429,6 +430,172 @@ Synonyms: ${matched.synonyms.slice(0, 4).join(', ')}`;
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Conversational Voice Agent (VĀK / Voice Mode)
+// ---------------------------------------------------------------------------
+app.post('/api/voice-agent', async (req, res) => {
+  try {
+    const { message, language = 'sanskrit', conversationHistory = [] } = req.body || {};
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'Please provide a message or spoken query.' });
+    }
+
+    const trimmedMessage = message.trim();
+    const ai = getAIClient();
+
+    const VOICE_GURU_SYSTEM_PROMPT = `You are Guru Vidyadhar, a wise, compassionate master of Indian classical philosophy, Sanskrit, Classical Tamil, and Vedic wisdom in the VĀKYA sanctuary.
+You are interacting with a seeker in real-time spoken audio conversation.
+
+Key Persona & Voice Guidelines:
+1. Speak with warmth, serenity, and profound insight.
+2. Tone: Gentle, articulate, and conversational (suitable for speech synthesis). Keep spoken responses concise (2-4 sentences max per turn) so the audio conversation remains natural, engaging, and dynamic.
+3. Language flexibility:
+   - Primary tradition context: ${language === 'tamil' ? 'Classical Tamil (தமிழ்)' : language === 'pali' ? 'Pali (पालि)' : 'Sanskrit (संस्कृतम्)'}.
+   - If the user speaks in English, Sanskrit, Tamil, Hindi, or any other language, fully understand their question and respond warmly. You should answer in clear English or the user's spoken tongue, while enriching the answer with authentic classical concepts, roots, or mantras where fitting.
+4. Output Format:
+Return ONLY valid JSON matching this schema:
+{
+  "verse": "Short sacred mantra/verse in original Devanagari or Tamil script (or empty if not applicable)",
+  "verseTranslation": "English translation of the verse",
+  "spokenResponse": "Direct, conversational, natural voice response from the Guru to be read aloud",
+  "topic": "Brief 2-3 word topic tag"
+}`;
+
+    if (ai) {
+      const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash'];
+      let voiceData: any = null;
+      let lastVoiceError: any = null;
+
+      const historyFormatted = conversationHistory
+        .slice(-4)
+        .map((h: any) => `${h.sender === 'user' ? 'Seeker' : 'Guru'}: ${h.text}`)
+        .join('\n');
+
+      const userPrompt = `${historyFormatted ? `Recent dialogue:\n${historyFormatted}\n\n` : ''}Seeker says: "${trimmedMessage}"`;
+
+      for (const modelName of modelsToTry) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: `${VOICE_GURU_SYSTEM_PROMPT}\n\n${userPrompt}`,
+          });
+
+          const rawText = response.text || '';
+          const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+          voiceData = JSON.parse(cleaned);
+          lastVoiceError = null;
+          break;
+        } catch (attemptError: any) {
+          lastVoiceError = attemptError;
+          console.error(`[VAKYA] Voice agent model "${modelName}" attempt failed:`, attemptError.message);
+        }
+      }
+
+      if (voiceData) {
+        return res.json({
+          verse: voiceData.verse || 'ॐ शान्तिः शान्तिः शान्तिः',
+          verseTranslation: voiceData.verseTranslation || 'May there be peace in all realms.',
+          spokenResponse: voiceData.spokenResponse || `I hear your inquiry regarding "${trimmedMessage}". Stillness of mind reveals eternal truth.`,
+          topic: voiceData.topic || 'Spiritual Inquiry',
+        });
+      }
+    }
+
+    // Offline / Fallback Conversational Response
+    const fallbackResponses = [
+      {
+        verse: 'ॐ असतो मा सद्गमय । तमसो मा ज्योतिर्गमय । मृत्योर्माऽमृतं गमय ॥',
+        verseTranslation: 'Lead me from the unreal to the real, from darkness to light, from mortality to immortality.',
+        spokenResponse: `I sense deep reflection in your voice regarding "${trimmedMessage}". In our classical tradition, inquiry itself is the flame that dissolves darkness.`,
+        topic: 'Upanishadic Dialogue',
+      },
+      {
+        verse: 'विद्या ददाति विनयं विनयाद्याति पात्रताम् ।',
+        verseTranslation: 'True knowledge bestows humility, from humility comes worthiness.',
+        spokenResponse: `Your words touch upon the eternal quest for wisdom. Keep your awareness attuned to inner silence as you contemplate "${trimmedMessage}".`,
+        topic: 'Wisdom & Conduct',
+      },
+      {
+        verse: 'மனத்துக்கண் மாசிலன் ஆதல் அனைத்தறன் ஆகுல நீர பிற.',
+        verseTranslation: 'Purity in mind and heart is the essence of all virtue.',
+        spokenResponse: `In the Tamil Sangam wisdom, clarity of mind is the greatest sanctuary. Reflect upon "${trimmedMessage}" with peace and dedication.`,
+        topic: 'Sangam Aram',
+      },
+    ];
+
+    const randomChoice = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+    return res.json(randomChoice);
+
+  } catch (error: any) {
+    console.error('[VAKYA] Error in /api/voice-agent:', error);
+    res.status(500).json({
+      error: 'An error occurred in the Voice Sanctuary.',
+      details: error.message,
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// LiveKit Room Token & Language Metadata Generator
+// ---------------------------------------------------------------------------
+app.post('/api/livekit-token', async (req, res) => {
+  try {
+    const {
+      roomName = 'vakya-sanctuary',
+      participantName = 'Seeker',
+      language = 'sanskrit',
+    } = req.body || {};
+
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    const wsUrl = process.env.LIVEKIT_URL || process.env.LIVEKIT_WS_URL;
+
+    if (!apiKey || !apiSecret || !wsUrl) {
+      return res.status(200).json({
+        isLiveKitConfigured: false,
+        message:
+          'LiveKit credentials (LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET) not detected. Using built-in high-performance WebRTC & Web Audio Sanctuary voice engine.',
+      });
+    }
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: `${participantName.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`,
+      name: participantName,
+      metadata: JSON.stringify({
+        language,
+        tradition: language,
+        prompt: `Language: ${language}. Voice Sanctuary of Indian Classical Wisdom.`,
+      }),
+    });
+
+    at.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
+
+    const token = await at.toJwt();
+
+    return res.json({
+      isLiveKitConfigured: true,
+      token,
+      serverUrl: wsUrl,
+      roomName,
+    });
+  } catch (error: any) {
+    console.error('[VAKYA] Error generating LiveKit token:', error);
+    res.status(500).json({
+      error: 'Failed to generate LiveKit access token.',
+      details: error.message,
+    });
+  }
+});
+
+
 
 // ---------------------------------------------------------------------------
 // Picture Vocabulary Quiz — generates a question (via text model) plus a

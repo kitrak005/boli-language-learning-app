@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, GraduationCap, Compass, Dumbbell, User, MessageCircleQuestion } from 'lucide-react';
+import { Home, GraduationCap, Compass, Dumbbell, User, MessageCircleQuestion, AudioLines } from 'lucide-react';
 
 interface BottomNavBarProps {
   activeTab: string;
@@ -13,6 +13,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChan
     { id: 'explore', label: 'Explore', icon: Compass },
     { id: 'practice', label: 'Practice', icon: Dumbbell },
     { id: 'askguru', label: 'Guru', icon: MessageCircleQuestion },
+    { id: 'voice', label: 'Vāk', icon: AudioLines },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 

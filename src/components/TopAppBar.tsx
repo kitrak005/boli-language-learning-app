@@ -62,6 +62,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           { id: 'explore', label: 'Explore' },
           { id: 'practice', label: 'Practice' },
           { id: 'askguru', label: 'Ask Guru' },
+          { id: 'voice', label: 'Voice Mode' },
           { id: 'profile', label: 'Profile' },
         ].map((item) => (
           <button
