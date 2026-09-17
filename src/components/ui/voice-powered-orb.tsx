@@ -251,7 +251,8 @@ export const VoicePoweredOrb: React.FC<VoicePoweredOrbProps> = ({
   return (
     <div
       className={cn(
-        'relative w-72 h-72 sm:w-80 sm:h-80 md:w-96 md:h-96 flex items-center justify-center select-none',
+        // Default size — can be fully overridden by passing className
+        'relative w-56 h-56 sm:w-64 sm:h-64 flex items-center justify-center select-none',
         className
       )}
     >

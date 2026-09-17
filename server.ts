@@ -434,9 +434,28 @@ Synonyms: ${matched.synonyms.slice(0, 4).join(', ')}`;
 // ---------------------------------------------------------------------------
 // Conversational Voice Agent (VĀK / Voice Mode)
 // ---------------------------------------------------------------------------
+const MAX_SESSION_TOKENS = 2500;
+
 app.post('/api/voice-agent', async (req, res) => {
   try {
-    const { message, language = 'sanskrit', conversationHistory = [] } = req.body || {};
+    const {
+      message,
+      language = 'sanskrit',
+      conversationHistory = [],
+      sessionTokensUsed = 0,
+    } = req.body || {};
+
+    // Token barrier per session
+    if (sessionTokensUsed >= MAX_SESSION_TOKENS) {
+      return res.json({
+        quotaExceeded: true,
+        spokenResponse: 'You have reached the end of your quota today.',
+        spokenResponseTranslation: 'You have reached the end of your quota today.',
+        tokensUsed: 0,
+        totalSessionTokens: sessionTokensUsed,
+        topic: 'Quota Limit Reached',
+      });
+    }
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'Please provide a message or spoken query.' });
@@ -484,6 +503,9 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
   "topic": "2–3 word topic tag in English"
 }`;
 
+    // Approximate token cost estimation
+    const estimatedPromptTokens = Math.ceil((trimmedMessage.length + 300) / 4);
+
     if (ai) {
       const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash'];
       let voiceData: any = null;
@@ -515,12 +537,18 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
       }
 
       if (voiceData) {
+        const spoken = voiceData.spokenResponse || `तव प्रश्नः श्रुतः। ज्ञानस्य ज्योतिः सदा प्रकाशते।`;
+        const estResponseTokens = Math.ceil((spoken.length + (voiceData.spokenResponseTranslation?.length || 0)) / 3);
+        const totalUsed = estimatedPromptTokens + estResponseTokens;
+
         return res.json({
           verse: voiceData.verse || 'ॐ शान्तिः शान्तिः शान्तिः',
           verseTranslation: voiceData.verseTranslation || 'May there be peace in all realms.',
-          spokenResponse: voiceData.spokenResponse || `तव प्रश्नः श्रुतः। ज्ञानस्य ज्योतिः सदा प्रकाशते।`,
+          spokenResponse: spoken,
           spokenResponseTranslation: voiceData.spokenResponseTranslation || 'Your inquiry has been heard. The light of wisdom always shines.',
-          topic: voiceData.topic || 'Spiritual Inquiry',
+          topic: voiceData.topic || 'Classical Philosophy',
+          tokensUsed: totalUsed,
+          quotaExceeded: (sessionTokensUsed + totalUsed) >= MAX_SESSION_TOKENS,
         });
       }
     }
@@ -528,14 +556,14 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
     // Offline / Fallback Conversational Response
     const fallbackResponses = [
       {
-        verse: 'ॐ असतो मा सद्गमय । तमसो मा ज्योतिर्गमय । मृत्योर्माऽमृतं गमय ॥',
-        verseTranslation: 'Lead me from the unreal to the real, from darkness to light, from mortality to immortality.',
-        spokenResponse: `I sense deep reflection in your voice regarding "${trimmedMessage}". In our classical tradition, inquiry itself is the flame that dissolves darkness.`,
-        topic: 'Upanishadic Dialogue',
-      },
-      {
         verse: 'विद्या ददाति विनयं विनयाद्याति पात्रताम् ।',
         verseTranslation: 'True knowledge bestows humility, from humility comes worthiness.',
+        spokenResponse: `I sense deep reflection in your voice regarding "${trimmedMessage}". In our classical tradition, inquiry itself is the flame that dissolves darkness.`,
+        topic: 'Classical Philosophy',
+      },
+      {
+        verse: 'सत्यमेव जयते नानृतम् ।',
+        verseTranslation: 'Truth alone triumphs, not falsehood.',
         spokenResponse: `Your words touch upon the eternal quest for wisdom. Keep your awareness attuned to inner silence as you contemplate "${trimmedMessage}".`,
         topic: 'Wisdom & Conduct',
       },
@@ -543,12 +571,17 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
         verse: 'மனத்துக்கண் மாசிலன் ஆதல் அனைத்தறன் ஆகுல நீர பிற.',
         verseTranslation: 'Purity in mind and heart is the essence of all virtue.',
         spokenResponse: `In the Tamil Sangam wisdom, clarity of mind is the greatest sanctuary. Reflect upon "${trimmedMessage}" with peace and dedication.`,
-        topic: 'Sangam Aram',
+        topic: 'Sangam Ethics',
       },
     ];
 
     const randomChoice = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
-    return res.json(randomChoice);
+    const fallbackTokens = estimatedPromptTokens + 45;
+    return res.json({
+      ...randomChoice,
+      tokensUsed: fallbackTokens,
+      quotaExceeded: (sessionTokensUsed + fallbackTokens) >= MAX_SESSION_TOKENS,
+    });
 
   } catch (error: any) {
     console.error('[VAKYA] Error in /api/voice-agent:', error);
