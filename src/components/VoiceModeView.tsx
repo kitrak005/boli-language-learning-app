@@ -40,12 +40,8 @@ interface VoiceModeViewProps {
 interface TranscriptItem {
   id: string;
   sender: 'user' | 'guru';
-  verse?: string;
-  verseTranslation?: string;
   text: string;
-  textTranslation?: string; // English translation when text is in Sanskrit/Tamil
   timestamp: string;
-  topic?: string;
   isQuotaAlert?: boolean;
 }
 
@@ -57,8 +53,32 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const MAX_SESSION_TOKENS = 2500;
-const VAD_ENERGY_THRESHOLD = 0.045; // RMS audio energy to register voice activity
-const SILENCE_TIMEOUT_MS = 1400; // Silence duration before auto-submitting speech
+const VAD_MIN_RMS = 0.028;
+const VAD_NOISE_MULTIPLIER = 2.1;
+const VAD_SPEECH_MARGIN = 0.018;
+const VAD_OPEN_FRAMES = 6;
+const VAD_CLOSE_FRAMES = 16;
+const VAD_MIN_SPEECH_MS = 280;
+const SILENCE_TIMEOUT_MS = 1500;
+
+const NOISE_FILLERS = new Set([
+  'a', 'ah', 'ahh', 'uh', 'um', 'umm', 'hmm', 'hm', 'huh', 'oh', 'the', 'you',
+  'yeah', 'yes', 'ok', 'okay', 'mm', 'mmm', 'er', 'eh',
+]);
+
+function isLikelyRealUtterance(text: string, confidence: number): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (confidence > 0 && confidence < 0.25) return false;
+
+  const letters = trimmed.replace(/[^\p{L}\p{N}]+/gu, '');
+  if (letters.length < 4) return false;
+
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length === 1 && NOISE_FILLERS.has(words[0].toLowerCase())) return false;
+
+  return true;
+}
 
 export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   currentTraditionId,
@@ -135,6 +155,15 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const isContinuousRef = useRef<boolean>(true);
   const quotaReachedRef = useRef<boolean>(quotaReached);
   const textInputRef = useRef<HTMLInputElement | null>(null);
+  const energySpeechRef = useRef(false);
+  const noiseFloorRef = useRef(0.018);
+  const speechFramesRef = useRef(0);
+  const silenceFramesRef = useRef(0);
+  const speechStartedAtRef = useRef<number | null>(null);
+  const lastEnergySpeechAtRef = useRef(0);
+  const lastConfidenceRef = useRef(1);
+  const isCommittingRef = useRef(false);
+  const isRestartingRef = useRef(false);
 
   // Keep refs in sync with state for callbacks
   isSpeakingRef.current = isSpeaking;
@@ -222,11 +251,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
                 const guruMsg: TranscriptItem = {
                   id: `guru-lk-${Date.now()}`,
                   sender: 'guru',
-                  verse: decoded.verse,
-                  verseTranslation: decoded.verseTranslation,
                   text: decoded.text,
                   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  topic: decoded.topic || 'Voice Session',
                 };
                 setTranscriptHistory((prev) => [...prev, guruMsg]);
               }
@@ -275,6 +301,10 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       audioContextRef.current = null;
     }
     analyserRef.current = null;
+    energySpeechRef.current = false;
+    speechFramesRef.current = 0;
+    silenceFramesRef.current = 0;
+    speechStartedAtRef.current = null;
     setAudioLevel(0);
     setIsVoiceActive(false);
   };
@@ -282,10 +312,15 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const abortRecognition = () => {
     clearSilenceTimer();
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch (_) { }
+      const rec = recognitionRef.current;
       recognitionRef.current = null;
+      try {
+        rec.onstart = null;
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.abort();
+      } catch (_) { }
     }
   };
 
@@ -429,7 +464,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
                 if (isContinuousRef.current && !isProcessingRef.current && !isSpeakingRef.current) {
                   startVADListening();
                 }
-              }, 400);
+              }, 900);
             }
           },
           englishFallback
@@ -487,27 +522,61 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.7;
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.45;
       source.connect(analyser); // Analyzer only (no echo back to speakers)
       analyserRef.current = analyser;
 
-      const data = new Uint8Array(analyser.frequencyBinCount);
+      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      const timeData = new Uint8Array(analyser.fftSize);
       const tick = () => {
         if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(data);
-        const avg = data.reduce((s, v) => s + v, 0) / data.length;
-        const normalized = Math.min(avg / 80, 1.0);
-        setAudioLevel(normalized);
+        analyserRef.current.getByteFrequencyData(freqData);
+        analyserRef.current.getByteTimeDomainData(timeData);
 
-        // Voice Activity Detection (VAD) thresholding
-        if (!isSpeakingRef.current && !isProcessingRef.current) {
-          const isVADActive = normalized > VAD_ENERGY_THRESHOLD;
-          setIsVoiceActive(isVADActive);
+        let sumSq = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const v = (timeData[i] - 128) / 128;
+          sumSq += v * v;
+        }
+        const rms = Math.sqrt(sumSq / timeData.length);
+        const freqAvg = freqData.reduce((s, v) => s + v, 0) / freqData.length;
+        setAudioLevel(Math.min(Math.max(rms * 5, freqAvg / 90), 1));
 
-          if (isVADActive) {
-            // Speech energy detected -> clear any pending silence timeout
-            clearSilenceTimer();
+        if (isSpeakingRef.current || isProcessingRef.current) {
+          energySpeechRef.current = false;
+          speechFramesRef.current = 0;
+          setIsVoiceActive(false);
+          animFrameRef.current = requestAnimationFrame(tick);
+          return;
+        }
+
+        if (!energySpeechRef.current) {
+          noiseFloorRef.current = Math.min(0.04, noiseFloorRef.current * 0.97 + rms * 0.03);
+        }
+
+        const threshold = Math.max(
+          VAD_MIN_RMS,
+          noiseFloorRef.current * VAD_NOISE_MULTIPLIER + VAD_SPEECH_MARGIN
+        );
+
+        if (rms > threshold) {
+          speechFramesRef.current += 1;
+          silenceFramesRef.current = 0;
+          if (speechFramesRef.current >= VAD_OPEN_FRAMES) {
+            energySpeechRef.current = true;
+            lastEnergySpeechAtRef.current = Date.now();
+            if (!speechStartedAtRef.current) {
+              speechStartedAtRef.current = Date.now();
+            }
+            setIsVoiceActive(true);
+          }
+        } else {
+          silenceFramesRef.current += 1;
+          speechFramesRef.current = 0;
+          if (silenceFramesRef.current >= VAD_CLOSE_FRAMES) {
+            energySpeechRef.current = false;
+            setIsVoiceActive(false);
           }
         }
 
@@ -523,6 +592,9 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const startVADListening = useCallback(() => {
     if (quotaReachedRef.current) return;
     if (isProcessingRef.current || isSpeakingRef.current) return;
+    if (recognitionRef.current) return;
+
+    isCommittingRef.current = false;
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -533,95 +605,129 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
 
     setVoiceError(null);
-    abortRecognition();
     accTranscriptRef.current = '';
+    speechStartedAtRef.current = null;
+    lastConfidenceRef.current = 1;
+
+    const discardNoiseTurn = () => {
+      accTranscriptRef.current = '';
+      speechStartedAtRef.current = null;
+      lastConfidenceRef.current = 1;
+      setLiveUserSpeech('');
+    };
+
+    const commitUtteranceIfValid = () => {
+      if (isCommittingRef.current || isProcessingRef.current || isSpeakingRef.current) return false;
+      const finalText = accTranscriptRef.current.trim();
+      const startedAt = speechStartedAtRef.current;
+      const speechMs = startedAt ? Date.now() - startedAt : 0;
+
+      if (!finalText || speechMs < VAD_MIN_SPEECH_MS || !isLikelyRealUtterance(finalText, lastConfidenceRef.current)) {
+        discardNoiseTurn();
+        return false;
+      }
+
+      isCommittingRef.current = true;
+      accTranscriptRef.current = '';
+      speechStartedAtRef.current = null;
+      setIsVoiceActive(false);
+      abortRecognition();
+      handleQuery(finalText);
+      return true;
+    };
 
     try {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
 
       const langObj = LANGUAGE_OPTIONS.find((l) => l.id === selectedLanguage);
       recognition.lang = langObj?.lang || 'en-US';
 
       recognition.onstart = () => {
+        isRestartingRef.current = false;
         setIsListening(true);
         startAudioCapture();
       };
 
       recognition.onresult = (event: any) => {
-        if (isSpeakingRef.current || isProcessingRef.current) return;
+        if (isCommittingRef.current || isSpeakingRef.current || isProcessingRef.current) return;
 
         let interim = '';
         let final = '';
+        let confidence = 0;
+        let confidenceSamples = 0;
         for (let i = 0; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            final += event.results[i][0].transcript + ' ';
-          } else {
-            interim += event.results[i][0].transcript;
+          const alt = event.results[i][0];
+          if (typeof alt.confidence === 'number' && alt.confidence > 0) {
+            confidence += alt.confidence;
+            confidenceSamples += 1;
           }
+          if (event.results[i].isFinal) {
+            final += alt.transcript + ' ';
+          } else {
+            interim += alt.transcript;
+          }
+        }
+        if (confidenceSamples > 0) {
+          lastConfidenceRef.current = confidence / confidenceSamples;
         }
 
         const combined = (final + interim).trim();
-        if (combined) {
-          accTranscriptRef.current = combined;
-          setLiveUserSpeech(combined);
-          setIsVoiceActive(true);
+        if (!combined) return;
 
-          // Reset silence timer on every speech packet
-          clearSilenceTimer();
-          silenceTimerRef.current = setTimeout(() => {
-            // VAD Silence detected: end of user speech turn
-            const finalText = accTranscriptRef.current.trim();
-            if (finalText && !isProcessingRef.current && !isSpeakingRef.current) {
-              setIsVoiceActive(false);
-              abortRecognition();
-              handleQuery(finalText);
-            }
-          }, SILENCE_TIMEOUT_MS);
+        if (!speechStartedAtRef.current) {
+          speechStartedAtRef.current = Date.now();
         }
+        accTranscriptRef.current = combined;
+        setLiveUserSpeech(combined);
+
+        clearSilenceTimer();
+        silenceTimerRef.current = setTimeout(() => {
+          commitUtteranceIfValid();
+        }, SILENCE_TIMEOUT_MS);
       };
 
       recognition.onerror = (event: any) => {
         const err = event.error;
+        if (err === 'aborted' || err === 'no-speech') return;
+
         console.warn('[VoiceMode VAD] Recognition event:', err);
 
         if (err === 'not-allowed') {
           setVoiceError('Microphone permission denied. Please allow mic access to use continuous voice.');
           setIsListening(false);
           stopAudioCapture();
-        } else if (err === 'network') {
-          setVoiceError('Network error connecting speech recognition. You can type queries below.');
+          return;
         }
-
-        // For non-fatal errors (no-speech, etc.), automatically resume if continuous listening is enabled
-        if (isContinuousRef.current && !isProcessingRef.current && !isSpeakingRef.current && !quotaReachedRef.current) {
-          setTimeout(() => {
-            if (isContinuousRef.current && !isProcessingRef.current && !isSpeakingRef.current) {
-              startVADListening();
-            }
-          }, 800);
+        if (err === 'network') {
+          setVoiceError('Network error connecting speech recognition. You can type queries below.');
         }
       };
 
       recognition.onend = () => {
-        // If continuous listening is enabled and not processing or speaking, keep listening
-        if (
-          isContinuousRef.current &&
-          !isProcessingRef.current &&
-          !isSpeakingRef.current &&
-          !quotaReachedRef.current
-        ) {
-          const pendingText = accTranscriptRef.current.trim();
-          if (pendingText) {
-            handleQuery(pendingText);
-          } else {
-            // Restart VAD listener seamlessly
+        recognitionRef.current = null;
+
+        if (isCommittingRef.current || isProcessingRef.current || isSpeakingRef.current) {
+          setIsListening(false);
+          setIsVoiceActive(false);
+          return;
+        }
+
+        if (isContinuousRef.current && !quotaReachedRef.current) {
+          const committed = commitUtteranceIfValid();
+          if (!committed) {
             setTimeout(() => {
-              if (isContinuousRef.current && !isProcessingRef.current && !isSpeakingRef.current) {
+              if (
+                isContinuousRef.current &&
+                !isProcessingRef.current &&
+                !isSpeakingRef.current &&
+                !recognitionRef.current
+              ) {
                 startVADListening();
               }
-            }, 300);
+            }, 250);
           }
         } else {
           setIsListening(false);
@@ -632,6 +738,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       recognitionRef.current = recognition;
       recognition.start();
     } catch (err) {
+      isRestartingRef.current = false;
+      recognitionRef.current = null;
       console.error('[VoiceMode] VAD start error:', err);
       setIsListening(false);
       setVoiceError('Could not start microphone — please check permissions or type below.');
@@ -642,12 +750,14 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   // Initial continuous listening boot
   useEffect(() => {
     if (isContinuousListening && !quotaReached) {
-      const timer = setTimeout(() => {
-        startVADListening();
-      }, 500);
+      abortRecognition();
+      isCommittingRef.current = false;
+      const timer = setTimeout(() => startVADListening(), 400);
       return () => clearTimeout(timer);
     }
-  }, [isContinuousListening, selectedLanguage, quotaReached, startVADListening]);
+    // Intentionally omit startVADListening: recreating it was aborting the mic in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isContinuousListening, selectedLanguage, quotaReached]);
 
   const toggleContinuousListening = () => {
     sound.unlockAudio();
@@ -934,25 +1044,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      {/* ── Quick Prompt Chips ── */}
-      <div className="w-full flex items-center justify-center gap-2 flex-wrap my-1.5">
-        {[
-          'What is Dharma in daily life?',
-          'Explain Ahimsa and Karma',
-          'மனத்துக்கண் மாசிலன்',
-          'विद्या ददाति विनयं',
-        ].map((promptText, pIdx) => (
-          <button
-            key={pIdx}
-            onClick={() => handleQuery(promptText)}
-            disabled={quotaReached || isSpeaking || isProcessing}
-            className="px-3 py-1 rounded-full bg-white/[0.04] hover:bg-[#C5A059]/15 border border-white/10 text-white/60 hover:text-[#DFC386] text-[11px] transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            {promptText}
-          </button>
-        ))}
-      </div>
-
       {/* ── Text Input Fallback ── */}
       <form
         onSubmit={handleTextSubmit}
@@ -963,7 +1054,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           type="text"
           value={textInput}
           onChange={(e) => setTextInput(e.target.value)}
-          placeholder={quotaReached ? 'Quota exceeded for today.' : 'Or type your inquiry here…'}
+          placeholder={quotaReached ? 'Quota exceeded for today.' : 'Type your inquiry here…'}
           disabled={quotaReached || isProcessing}
           className="flex-1 bg-[#161616] border border-white/10 focus:border-[#C5A059]/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 outline-none transition-colors disabled:opacity-50"
         />
