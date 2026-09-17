@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic,
   MicOff,
@@ -41,15 +41,19 @@ interface TranscriptItem {
   id: string;
   sender: 'user' | 'guru';
   text: string;
+  textTranslation?: string;
   timestamp: string;
+  topic?: string;
+  verse?: string;
+  verseTranslation?: string;
   isQuotaAlert?: boolean;
 }
 
 const LANGUAGE_OPTIONS = [
-  { id: 'sanskrit', label: 'संस्कृतम् • Sanskrit', fullLabel: 'संस्कृतम् • Sanskrit', script: 'संस्कृतम्', lang: 'hi-IN' },
-  { id: 'tamil', label: 'தமிழ் • Tamil', fullLabel: 'தமிழ் • Tamil', script: 'தமிழ்', lang: 'ta-IN' },
-  { id: 'pali', label: 'पालि • Pali', fullLabel: 'पालि • Pali', script: 'पालि', lang: 'en-US' },
-  { id: 'all', label: 'Universal', fullLabel: 'सर्वभाषा • Universal', script: 'सर्व', lang: 'en-US' },
+  { id: 'sanskrit', label: 'à¤¸à¤‚à¤¸à¥à¤•à¥ƒà¤¤à¤®à¥ â€¢ Sanskrit', fullLabel: 'à¤¸à¤‚à¤¸à¥à¤•à¥ƒà¤¤à¤®à¥ â€¢ Sanskrit', script: 'à¤¸à¤‚à¤¸à¥à¤•à¥ƒà¤¤à¤®à¥', lang: 'hi-IN' },
+  { id: 'tamil', label: 'à®¤à®®à®¿à®´à¯ â€¢ Tamil', fullLabel: 'à®¤à®®à®¿à®´à¯ â€¢ Tamil', script: 'à®¤à®®à®¿à®´à¯', lang: 'ta-IN' },
+  { id: 'pali', label: 'à¤ªà¤¾à¤²à¤¿ â€¢ Pali', fullLabel: 'à¤ªà¤¾à¤²à¤¿ â€¢ Pali', script: 'à¤ªà¤¾à¤²à¤¿', lang: 'en-US' },
+  { id: 'all', label: 'Universal', fullLabel: 'à¤¸à¤°à¥à¤µà¤­à¤¾à¤·à¤¾ â€¢ Universal', script: 'à¤¸à¤°à¥à¤µ', lang: 'en-US' },
 ];
 
 const MAX_SESSION_TOKENS = 2500;
@@ -474,7 +478,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         const fallback: TranscriptItem = {
           id: `guru-fallback-${Date.now()}`,
           sender: 'guru',
-          verse: 'विद्या ददाति विनयं विनयाद्याति पात्रताम् ।',
+          verse: 'à¤µà¤¿à¤¦à¥à¤¯à¤¾ à¤¦à¤¦à¤¾à¤¤à¤¿ à¤µà¤¿à¤¨à¤¯à¤‚ à¤µà¤¿à¤¨à¤¯à¤¾à¤¦à¥à¤¯à¤¾à¤¤à¤¿ à¤ªà¤¾à¤¤à¥à¤°à¤¤à¤¾à¤®à¥ à¥¤',
           verseTranslation: 'True knowledge bestows humility, from humility comes worthiness.',
           text: 'I sense the sincerity in your voice. Let us abide in the peace of wisdom.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -600,7 +604,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setVoiceError('Voice recognition not supported in this browser — please use the text input below.');
+      setVoiceError('Voice recognition not supported in this browser â€” please use the text input below.');
       return;
     }
 
@@ -742,7 +746,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       recognitionRef.current = null;
       console.error('[VoiceMode] VAD start error:', err);
       setIsListening(false);
-      setVoiceError('Could not start microphone — please check permissions or type below.');
+      setVoiceError('Could not start microphone â€” please check permissions or type below.');
       stopAudioCapture();
     }
   }, [selectedLanguage, handleQuery]);
@@ -832,7 +836,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   return (
     <div className="relative flex flex-col items-center px-3 sm:px-6 pb-6 max-w-2xl mx-auto select-none animate-in fade-in duration-300">
 
-      {/* ── Top Navigation & Session Stats ── */}
+      {/* â”€â”€ Top Navigation & Session Stats â”€â”€ */}
       <div className="w-full flex items-center justify-between pt-2 pb-4 border-b border-white/10">
         <button
           id="btn-voice-back"
@@ -848,7 +852,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#C5A059]/10 border border-[#C5A059]/30 shadow-sm">
           <span className={`w-2 h-2 rounded-full ${isVoiceActive ? 'bg-emerald-400 animate-ping' : isListening ? 'bg-[#C5A059] animate-pulse' : 'bg-white/30'}`} />
           <span className="text-[11px] font-semibold tracking-[0.2em] text-[#C5A059] uppercase font-mono">
-            VĀK VOICE SESSION
+            VÄ€K VOICE SESSION
           </span>
           <AudioLines className="w-3.5 h-3.5 text-[#C5A059]" />
         </div>
@@ -866,7 +870,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </div>
       </div>
 
-      {/* ── Token Barrier / Session Quota Meter ── */}
+      {/* â”€â”€ Token Barrier / Session Quota Meter â”€â”€ */}
       <div className="w-full mt-2.5 px-3.5 py-2 rounded-xl bg-[#141414]/80 border border-white/10 flex items-center justify-between text-xs backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Zap className={`w-3.5 h-3.5 ${quotaReached ? 'text-red-400' : 'text-[#C5A059]'}`} />
@@ -897,7 +901,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </div>
       </div>
 
-      {/* ── Quota Alert Banner (When Reached) ── */}
+      {/* â”€â”€ Quota Alert Banner (When Reached) â”€â”€ */}
       {quotaReached && (
         <div className="w-full mt-2.5 p-3 rounded-xl bg-red-950/40 border border-red-500/40 flex items-center gap-2.5 text-xs text-red-200 animate-in fade-in">
           <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
@@ -908,7 +912,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </div>
       )}
 
-      {/* ── Language Selector ── */}
+      {/* â”€â”€ Language Selector â”€â”€ */}
       <div className="relative z-30 my-2.5">
         <button
           id="btn-voice-language-selector"
@@ -947,7 +951,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      {/* ── Sacred Orb (Fixed Inside Circle Visualizer) ── */}
+      {/* â”€â”€ Sacred Orb (Fixed Inside Circle Visualizer) â”€â”€ */}
       <div className="relative my-2 sm:my-3 flex flex-col items-center">
         <VoicePoweredOrb
           audioLevel={audioLevel}
@@ -966,7 +970,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      {/* ── Voice Activity Detection (VAD) Continuous Controls ── */}
+      {/* â”€â”€ Voice Activity Detection (VAD) Continuous Controls â”€â”€ */}
       <div className="flex flex-col items-center gap-2 my-2 w-full">
         <Button
           id="btn-voice-vad-toggle"
@@ -995,22 +999,22 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           ) : isVoiceActive ? (
             <>
               <Radio className="w-4 h-4 animate-ping text-black" />
-              <span>Voice Detected • Listening…</span>
+              <span>Voice Detected â€¢ Listeningâ€¦</span>
             </>
           ) : isSpeaking ? (
             <>
               <Volume2 className="w-4 h-4 animate-pulse" />
-              <span>Speaking Response • Tap to Mute</span>
+              <span>Speaking Response â€¢ Tap to Mute</span>
             </>
           ) : isProcessing ? (
             <>
               <Sparkles className="w-4 h-4 animate-spin" />
-              <span>Synthesizing response…</span>
+              <span>Synthesizing responseâ€¦</span>
             </>
           ) : isContinuousListening ? (
             <>
               <Mic className="w-4 h-4 text-black animate-pulse" />
-              <span>Continuous VAD Active • Listening</span>
+              <span>Continuous VAD Active â€¢ Listening</span>
             </>
           ) : (
             <>
@@ -1025,7 +1029,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           {quotaReached
             ? 'Daily session quota exhausted. Quota resets tomorrow.'
             : isVoiceActive
-              ? 'Voice activity detected — pause speaking to send query.'
+              ? 'Voice activity detected â€” pause speaking to send query.'
               : isSpeaking
                 ? 'Playing audio response in selected tradition.'
                 : isProcessing
@@ -1044,7 +1048,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      {/* ── Text Input Fallback ── */}
+      {/* â”€â”€ Text Input Fallback â”€â”€ */}
       <form
         onSubmit={handleTextSubmit}
         className="w-full flex items-center gap-2 mt-2 mb-3"
@@ -1054,7 +1058,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           type="text"
           value={textInput}
           onChange={(e) => setTextInput(e.target.value)}
-          placeholder={quotaReached ? 'Quota exceeded for today.' : 'Type your inquiry here…'}
+          placeholder={quotaReached ? 'Quota exceeded for today.' : 'Type your inquiry hereâ€¦'}
           disabled={quotaReached || isProcessing}
           className="flex-1 bg-[#161616] border border-white/10 focus:border-[#C5A059]/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 outline-none transition-colors disabled:opacity-50"
         />
@@ -1067,7 +1071,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </button>
       </form>
 
-      {/* ── Session Transcript ── */}
+      {/* â”€â”€ Session Transcript â”€â”€ */}
       <div className="w-full bg-[#121212]/95 border border-white/10 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl">
         <button
           id="btn-toggle-transcript"
@@ -1116,11 +1120,11 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
                     <div className={`flex items-center gap-2 text-[10px] uppercase tracking-wider text-white/40 ${!isGuru ? 'justify-end' : ''}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${isAlert ? 'bg-red-400' : 'bg-[#C5A059]'}`} />
                       <span>{item.timestamp}</span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span className="font-semibold text-white/60">{isGuru ? 'AI GURU' : 'SEEKER'}</span>
                       {item.topic && isGuru && (
                         <>
-                          <span>•</span>
+                          <span>â€¢</span>
                           <span className={isAlert ? 'text-red-400' : 'text-[#C5A059]/80'}>{item.topic}</span>
                         </>
                       )}
@@ -1147,7 +1151,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
                     {/* Translation */}
                     {item.textTranslation && isGuru && !isAlert && (
                       <p className="text-[11px] text-white/45 italic mt-1 pl-2">
-                        ↳ {item.textTranslation}
+                        â†³ {item.textTranslation}
                       </p>
                     )}
                   </div>
@@ -1160,7 +1164,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
               <div className="text-right bg-[#C5A059]/10 p-2.5 rounded-xl border border-[#C5A059]/30 space-y-1 animate-pulse">
                 <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-wider text-[#C5A059]">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Speaking Now • SEEKER</span>
+                  <span>Speaking Now â€¢ SEEKER</span>
                 </div>
                 <p className="text-xs sm:text-sm text-white/90 italic">"{liveUserSpeech}"</p>
               </div>
@@ -1173,3 +1177,4 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     </div>
   );
 };
+
