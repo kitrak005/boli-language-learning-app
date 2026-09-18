@@ -117,6 +117,13 @@ class SoundEngine {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.resume();
+        // Prime the engine with a near-silent utterance directly inside
+        // the user gesture — this is what actually unlocks speechSynthesis
+        // on Android Chrome for later async speak() calls, since resume()
+        // alone is a no-op if nothing has ever spoken yet.
+        const primer = new SpeechSynthesisUtterance(' ');
+        primer.volume = 0;
+        window.speechSynthesis.speak(primer);
       } catch {
         // ignore
       }
