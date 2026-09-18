@@ -24,17 +24,19 @@ function estimateTokens(text: string): number {
 function buildLanguageInstruction(language: string): string {
     switch (language) {
         case 'sanskrit':
-            return 'Respond primarily as a Sanskrit-tradition spiritual guide.';
+            return 'Respond primarily in classical Sanskrit (Devanagari script), speaking as a Sanskrit-tradition guru. Keep the Sanskrit natural and conversational where possible, not overly archaic or dense.';
         case 'tamil':
-            return 'Respond primarily as a Classical Tamil-tradition spiritual guide.';
+            return 'Respond primarily in Classical/literary Tamil script, speaking as a Tamil-tradition guru.';
         case 'pali':
-            return 'Respond primarily as a Pali/Buddhist-tradition spiritual guide.';
+            return 'Respond primarily in Pali (using Devanagari or romanized Pali script), speaking as a Pali/Buddhist-tradition guru.';
         case 'all':
         default:
-            return 'Respond as a universal classical-wisdom guide, drawing from whichever tradition (Sanskrit, Pali, or Classical Tamil) best fits the question.';
+            return 'Respond in whichever classical language (Sanskrit, Pali, or Classical Tamil) best fits the question, speaking as a universal classical-wisdom guru.';
     }
 }
 
+// Vercel serverless function handler. Vercel automatically parses JSON bodies
+// and provides res.status()/.json() helpers for functions in the /api folder.
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         res.status(405).json({ error: 'Method not allowed. Use POST.' });
@@ -54,6 +56,8 @@ export default async function handler(req: any, res: any) {
             return;
         }
 
+        // Server-side token barrier enforcement (mirrors the client-side check,
+        // but this is the source of truth - never trust the client alone).
         if (sessionTokensUsed >= MAX_SESSION_TOKENS) {
             res.status(200).json({
                 quotaExceeded: true,
@@ -78,20 +82,20 @@ export default async function handler(req: any, res: any) {
                 const systemPrompt = `You are the AI Guru in Vakya, a warm and wise spiritual guide. ${languageInstruction}
 
 Language Rule (very important):
-- Always reply in the SAME language the seeker used to ask their question. If they wrote in Hindi (Devanagari or Hinglish/romanized Hindi), reply naturally in Hindi. If they wrote in English, reply in English. If they wrote in Tamil, reply in Tamil.
-- Match their register: if they wrote casually (like "aap kaise hai"), reply warmly and conversationally in that same style, not with a formal or textbook tone.
+- Your spokenResponse MUST be in the classical language described above, regardless of what language the seeker used to ask their question. If they asked in Hindi or English, still respond in the classical language above - do not switch to their language.
+- ALWAYS include a "spokenResponseTranslation" field with a clear, natural English translation of your spokenResponse, since most seekers will not read the classical script directly.
 
 Persona Rules:
 - Speak like a real, approachable spiritual guru having a genuine conversation, not like an encyclopedia entry. Use natural warmth, gentle humor when it fits, and occasional traditional touches (like "Om Shanti", a soft blessing, or addressing them affectionately) where it feels authentic and not forced.
 - Keep your spoken response short and conversational (2-4 sentences) - this will be read aloud via text-to-speech, so avoid bullet points, headers, citations-heavy language, or markdown formatting.
 - Never invent scriptural citations you are not confident about.
-- If the seeker's message is unrelated to spiritual guidance, wisdom, or classical teachings, gently and warmly redirect them back to the purpose of this space in 1-2 sentences, still in their language.
+- If the seeker's message is unrelated to spiritual guidance, wisdom, or classical teachings, gently and warmly redirect them back to the purpose of this space in 1-2 sentences, still in the classical language above.
 - Give a short "topic" label (2-4 words, in English) summarizing what this exchange was about.
 
 Respond ONLY with a valid JSON object in this exact shape, and nothing else (no markdown fences, no preamble):
 {
-  "spokenResponse": "the response to be spoken aloud, in the SAME language the seeker used",
-  "spokenResponseTranslation": "an English translation, only if spokenResponse is not already in English, otherwise omit this field",
+  "spokenResponse": "the response in the classical language described above",
+  "spokenResponseTranslation": "a clear English translation of spokenResponse",
   "topic": "short topic label in English"
 }`;
 
@@ -122,6 +126,7 @@ Respond ONLY with a valid JSON object in this exact shape, and nothing else (no 
                     throw lastError;
                 }
 
+                // Strip markdown code fences if the model added them despite instructions.
                 const cleaned = textOutput.replace(/```json|```/g, '').trim();
                 const parsed = JSON.parse(cleaned);
 
@@ -142,6 +147,8 @@ Respond ONLY with a valid JSON object in this exact shape, and nothing else (no 
             }
         }
 
+        // Offline / error fallback - matches the client-side catch-block fallback
+        // in VoiceModeView.tsx so the experience is consistent either way.
         const fallbackText = 'I sense the sincerity in your voice. Let us abide in the peace of wisdom.';
         const tokensUsed = estimateTokens(trimmedMessage + fallbackText);
 
