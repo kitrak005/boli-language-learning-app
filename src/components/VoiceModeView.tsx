@@ -643,9 +643,15 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
     try {
       const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
+// NOTE: continuous=false on purpose. Android Chrome has a well-known bug
+// where continuous=true causes the speech engine to repeatedly re-append
+// the same recognized phrase to the results array (a duplication loop).
+// We already manually restart recognition ourselves via onend, so we don't
+// need the browser's own continuous mode - this avoids the Android bug
+// while still achieving continuous listening at the app level.
+recognition.continuous = false;
+recognition.interimResults = true;
+recognition.maxAlternatives = 1;
 
       const langObj = LANGUAGE_OPTIONS.find((l) => l.id === selectedLanguage);
       recognition.lang = langObj?.lang || 'en-US';
