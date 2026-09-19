@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import DebugOverlay from './DebugOverlay';
 import {
   Mic,
   MicOff,
@@ -94,7 +93,14 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     currentTraditionId || 'sanskrit'
   );
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [isContinuousListening, setIsContinuousListening] = useState<boolean>(false); // VAD continuous listening master toggle - starts paused so the first recognition.start() is a genuine user gesture (required by mobile Chrome for mic permission)
+  // Starts FALSE on purpose: mobile Chrome requires SpeechRecognition.start()
+  // to be triggered by a direct user gesture (a tap) the first time,
+  // especially before mic permission has ever been granted. Auto-starting
+  // this on page load (no tap involved) causes an immediate "not-allowed"
+  // error on mobile, which can even get the site's mic permission
+  // permanently blocked by the browser. Requiring an explicit first tap
+  // (via the "Resume Continuous Listening" button) fixes this.
+  const [isContinuousListening, setIsContinuousListening] = useState<boolean>(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false); // VAD voice detected flag
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -157,7 +163,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSpeakingRef = useRef<boolean>(false);
   const isProcessingRef = useRef<boolean>(false);
-  const isContinuousRef = useRef<boolean>(true);
+  const isContinuousRef = useRef<boolean>(false);
   const quotaReachedRef = useRef<boolean>(quotaReached);
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const energySpeechRef = useRef(false);
@@ -189,6 +195,35 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       setSelectedLanguage(currentTraditionId);
     }
   }, [currentTraditionId]);
+
+  // Proactively check mic permission state so we can show clear instructions
+  // if it's blocked, since JS cannot force-reset a "denied" permission -
+  // only the user can do that via browser site settings.
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.permissions) {
+      navigator.permissions
+        .query({ name: 'microphone' as PermissionName })
+        .then((status) => {
+          if (status.state === 'denied') {
+            setVoiceError(
+              'Microphone access is blocked for this site. Tap the icon next to the address bar → Permissions → Microphone → Allow, then reload the page.'
+            );
+          }
+          status.onchange = () => {
+            if (status.state === 'denied') {
+              setVoiceError(
+                'Microphone access is blocked for this site. Tap the icon next to the address bar → Permissions → Microphone → Allow, then reload the page.'
+              );
+            } else if (status.state === 'granted') {
+              setVoiceError(null);
+            }
+          };
+        })
+        .catch(() => {
+          // Permissions API for microphone isn't supported in all browsers (e.g. Safari) - fail silently.
+        });
+    }
+  }, []);
 
   // Connect to LiveKit (for remote audio sync & visualizer)
   useEffect(() => {
@@ -643,15 +678,17 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
     try {
       const recognition = new SpeechRecognition();
-// NOTE: continuous=false on purpose. Android Chrome has a well-known bug
-// where continuous=true causes the speech engine to repeatedly re-append
-// the same recognized phrase to the results array (a duplication loop).
-// We already manually restart recognition ourselves via onend, so we don't
-// need the browser's own continuous mode - this avoids the Android bug
-// while still achieving continuous listening at the app level.
-recognition.continuous = false;
-recognition.interimResults = true;
-recognition.maxAlternatives = 1;
+      // NOTE: continuous=false on purpose. Android Chrome has a well-known
+      // bug where continuous=true causes the speech engine to repeatedly
+      // re-append the same recognized phrase to the results array (a
+      // duplication loop), producing garbled, massively repeated
+      // transcripts and much slower AI responses. We already manually
+      // restart recognition ourselves via onend below, so we don't need
+      // the browser's own continuous mode - this avoids the Android bug
+      // while still achieving continuous listening at the app level.
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
 
       const langObj = LANGUAGE_OPTIONS.find((l) => l.id === selectedLanguage);
       recognition.lang = langObj?.lang || 'en-US';
@@ -758,7 +795,9 @@ recognition.maxAlternatives = 1;
     }
   }, [selectedLanguage, handleQuery]);
 
-  // Initial continuous listening boot
+  // Initial continuous listening boot (only runs once the user has enabled
+  // continuous listening themselves via a tap - see isContinuousListening
+  // default above)
   useEffect(() => {
     if (isContinuousListening && !quotaReached) {
       abortRecognition();
@@ -792,7 +831,8 @@ recognition.maxAlternatives = 1;
       setIsListening(false);
       setIsVoiceActive(false);
     } else {
-      // Resume continuous listening
+      // Resume continuous listening - this tap IS the user gesture that
+      // allows mobile Chrome to properly show the mic permission prompt.
       setIsContinuousListening(true);
       isContinuousRef.current = true;
       startVADListening();
@@ -1179,9 +1219,8 @@ recognition.maxAlternatives = 1;
 
             <div ref={transcriptBottomRef} />
           </div>
-               )}
+        )}
       </div>
-      <DebugOverlay />
     </div>
   );
 };
