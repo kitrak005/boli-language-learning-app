@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import DebugOverlay from './DebugOverlay';
 import {
   Mic,
   MicOff,
@@ -1172,9 +1173,9 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
             <div ref={transcriptBottomRef} />
           </div>
-        )}
+               )}
       </div>
+      <DebugOverlay />
     </div>
   );
 };
-
