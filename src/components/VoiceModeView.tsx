@@ -94,7 +94,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     currentTraditionId || 'sanskrit'
   );
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [isContinuousListening, setIsContinuousListening] = useState(true); // VAD continuous listening master toggle
+  const [isContinuousListening, setIsContinuousListening] = useState<boolean>(false); // VAD continuous listening master toggle - starts paused so the first recognition.start() is a genuine user gesture (required by mobile Chrome for mic permission)
   const [isVoiceActive, setIsVoiceActive] = useState(false); // VAD voice detected flag
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
