@@ -104,7 +104,8 @@ export const AuthScreen: React.FC = () => {
                             <Mail className="w-4 h-4 text-white/30 absolute left-3.5 top-1/2 -translate-y-1/2" />
                             <input
                                 type="email"
-                                placeholder="Scholarly Address"
+                                placeholder="Email Address"
+                            
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -116,7 +117,7 @@ export const AuthScreen: React.FC = () => {
                             <Lock className="w-4 h-4 text-white/30 absolute left-3.5 top-1/2 -translate-y-1/2" />
                             <input
                                 type="password"
-                                placeholder="Cipher (Password)"
+                                placeholder="Password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
@@ -145,7 +146,7 @@ export const AuthScreen: React.FC = () => {
                                     type="button"
                                     className="text-xs text-[#C5A059]/70 hover:text-[#C5A059] underline cursor-pointer"
                                 >
-                                    Recover Cipher?
+                                  Recover Password?
                                 </button>
                             </div>
                         )}
