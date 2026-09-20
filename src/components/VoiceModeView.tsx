@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DebugOverlay from './DebugOverlay';
 import {
   Mic,
@@ -624,7 +624,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     if (!isResumingUtterance) {
       accTranscriptRef.current = '';
       finalizedSoFarRef.current = '';
-      
+
       speechStartedAtRef.current = null;
       lastConfidenceRef.current = 1;
     }
@@ -632,7 +632,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     const discardNoiseTurn = () => {
       accTranscriptRef.current = '';
       finalizedSoFarRef.current = '';
-     
+
       speechStartedAtRef.current = null;
       lastConfidenceRef.current = 1;
       setLiveUserSpeech('');
@@ -652,7 +652,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       isCommittingRef.current = true;
       accTranscriptRef.current = '';
       finalizedSoFarRef.current = '';
-      
+
       speechStartedAtRef.current = null;
       setIsVoiceActive(false);
       abortRecognition();
@@ -663,75 +663,89 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     try {
       const recognition = new SpeechRecognition();
       // continuous=true. The earlier duplication bug was caused by our own
-// result-processing loop re-scanning from index 0 every time. The real
-// fix is event.resultIndex-based accumulation below - continuous=false
-// has its own bug on some Android Chrome versions where onresult never
-// fires at all, which is what's breaking recognition right now.
-recognition.continuous = true;
-recognition.interimResults = true;
-recognition.maxAlternatives = 1;
+      // result-processing loop re-scanning from index 0 every time. The real
+      // fix is event.resultIndex-based accumulation below - continuous=false
+      // has its own bug on some Android Chrome versions where onresult never
+      // fires at all, which is what's breaking recognition right now.
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
 
       const langObj = LANGUAGE_OPTIONS.find((l) => l.id === selectedLanguage);
       recognition.lang = langObj?.lang || 'en-US';
 
-     recognition.onstart = () => {
-        console.log('[VAKYA DEBUG] recognition.onstart fired - mic is now active');
+      recognition.onstart = () => {
+        console.log('[VAKYA DEBUG] recognition.onstart fired - mic is now active, lang:', recognition.lang);
         isRestartingRef.current = false;
         setIsListening(true);
-        startAudioCapture();
+        // NOTE: startAudioCapture() used to be called here, but it opens its own
+        // separate getUserMedia() stream (for the audio-level visualizer) that
+        // runs concurrently with SpeechRecognition's own internal mic capture.
+        // On many Android devices, two simultaneous mic consumers cause the
+        // recognition engine to silently receive no usable audio - mic looks
+        // "active" but never produces any result. We no longer run a second
+        // concurrent stream; see onresult below for how isVoiceActive is now
+        // derived instead.
       };
 
       recognition.onresult = (event: any) => {
-  if (isCommittingRef.current || isSpeakingRef.current || isProcessingRef.current) return;
+        if (isCommittingRef.current || isSpeakingRef.current || isProcessingRef.current) return;
 
-  // Only scan results from event.resultIndex onward - the range that's
-  // NEW since the last onresult event. Scanning from 0 every time was
-  // the actual bug: it re-added every already-finalized phrase again
-  // and again, causing the repeated/duplicated transcript.
-  let newFinalChunk = '';
-  let currentInterim = '';
-  let confidence = 0;
-  let confidenceSamples = 0;
+        // Only scan results from event.resultIndex onward - the range that's
+        // NEW since the last onresult event. Scanning from 0 every time was
+        // the actual bug: it re-added every already-finalized phrase again
+        // and again, causing the repeated/duplicated transcript.
+        let newFinalChunk = '';
+        let currentInterim = '';
+        let confidence = 0;
+        let confidenceSamples = 0;
 
-  for (let i = event.resultIndex; i < event.results.length; i++) {
-    const result = event.results[i];
-    const alt = result[0];
-    if (typeof alt.confidence === 'number' && alt.confidence > 0) {
-      confidence += alt.confidence;
-      confidenceSamples += 1;
-    }
-    if (result.isFinal) {
-      newFinalChunk += alt.transcript + ' ';
-    } else {
-      currentInterim += alt.transcript;
-    }
-  }
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          const alt = result[0];
+          if (typeof alt.confidence === 'number' && alt.confidence > 0) {
+            confidence += alt.confidence;
+            confidenceSamples += 1;
+          }
+          if (result.isFinal) {
+            newFinalChunk += alt.transcript + ' ';
+          } else {
+            currentInterim += alt.transcript;
+          }
+        }
 
-  if (confidenceSamples > 0) {
-    lastConfidenceRef.current = confidence / confidenceSamples;
-  }
+        if (confidenceSamples > 0) {
+          lastConfidenceRef.current = confidence / confidenceSamples;
+        }
 
-  console.log('[VAKYA DEBUG] onresult fired, resultIndex:', event.resultIndex, 'newFinalChunk:', newFinalChunk, 'interim:', currentInterim);
+        console.log('[VAKYA DEBUG] onresult fired, resultIndex:', event.resultIndex, 'newFinalChunk:', newFinalChunk, 'interim:', currentInterim);
+        // Derive the "voice active" pulse from recognition activity itself,
+        // since we no longer run a separate concurrent audio-analysis stream.
+        if (newFinalChunk.trim() || currentInterim.trim()) {
+          setIsVoiceActive(true);
+          setAudioLevel(0.6);
+        }
+        if (newFinalChunk.trim()) {
+          finalizedSoFarRef.current = (finalizedSoFarRef.current + ' ' + newFinalChunk).trim();
+        }
 
-  if (newFinalChunk.trim()) {
-    finalizedSoFarRef.current = (finalizedSoFarRef.current + ' ' + newFinalChunk).trim();
-  }
+        const fullText = (finalizedSoFarRef.current + ' ' + currentInterim).trim();
+        if (!fullText) return;
 
-  const fullText = (finalizedSoFarRef.current + ' ' + currentInterim).trim();
-  if (!fullText) return;
+        if (!speechStartedAtRef.current) {
+          speechStartedAtRef.current = Date.now();
+        }
 
-  if (!speechStartedAtRef.current) {
-    speechStartedAtRef.current = Date.now();
-  }
+        accTranscriptRef.current = fullText;
+        setLiveUserSpeech(fullText);
 
-  accTranscriptRef.current = fullText;
-  setLiveUserSpeech(fullText);
-
-  clearSilenceTimer();
-  silenceTimerRef.current = setTimeout(() => {
-    commitUtteranceIfValid();
-  }, SILENCE_TIMEOUT_MS);
-};
+        clearSilenceTimer();
+        silenceTimerRef.current = setTimeout(() => {
+          setIsVoiceActive(false);
+          setAudioLevel(0);
+          commitUtteranceIfValid();
+        }, SILENCE_TIMEOUT_MS);
+      };
 
       recognition.onerror = (event: any) => {
         const err = event.error;
@@ -758,10 +772,10 @@ recognition.maxAlternatives = 1;
           setIsVoiceActive(false);
           return;
         }
-         if (isContinuousRef.current && !quotaReachedRef.current) {
-  // finalizedSoFarRef already contains everything finalized so far
-  // (accumulated directly in onresult), so nothing extra to fold in here.
-  setTimeout(() => {
+        if (isContinuousRef.current && !quotaReachedRef.current) {
+          // finalizedSoFarRef already contains everything finalized so far
+          // (accumulated directly in onresult), so nothing extra to fold in here.
+          setTimeout(() => {
             if (
               isContinuousRef.current &&
               !isProcessingRef.current &&
@@ -1210,7 +1224,7 @@ recognition.maxAlternatives = 1;
           </div>
         )}
       </div>
-          <DebugOverlay />
+      <DebugOverlay />
     </div>
   );
 };
