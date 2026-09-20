@@ -93,15 +93,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     currentTraditionId || 'sanskrit'
   );
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  // Starts FALSE on purpose: mobile Chrome requires SpeechRecognition.start()
-  // to be triggered by a direct user gesture (a tap) the first time,
-  // especially before mic permission has ever been granted. Auto-starting
-  // this on page load (no tap involved) causes an immediate "not-allowed"
-  // error on mobile, which can even get the site's mic permission
-  // permanently blocked by the browser. Requiring an explicit first tap
-  // (via the "Resume Continuous Listening" button) fixes this.
   const [isContinuousListening, setIsContinuousListening] = useState<boolean>(false);
-  const [isVoiceActive, setIsVoiceActive] = useState(false); // VAD voice detected flag
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -112,7 +105,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [transcriptHistory, setTranscriptHistory] = useState<TranscriptItem[]>([]);
 
-  // Token Barrier & Session Quota
   const getTodayQuotaKey = () => {
     const today = new Date().toISOString().slice(0, 10);
     return `vakya_voice_tokens_${today}`;
@@ -136,7 +128,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
   });
 
-  // Sync token changes to storage
   const recordTokens = (additionalTokens: number) => {
     setTokensUsed((prev) => {
       const next = prev + additionalTokens;
@@ -160,6 +151,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const animFrameRef = useRef<number | null>(null);
   const transcriptBottomRef = useRef<HTMLDivElement | null>(null);
   const accTranscriptRef = useRef<string>('');
+  const finalizedSoFarRef = useRef<string>('');
+  const lastFinalTranscriptRef = useRef<string>('');
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSpeakingRef = useRef<boolean>(false);
   const isProcessingRef = useRef<boolean>(false);
@@ -176,29 +169,23 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const isCommittingRef = useRef(false);
   const isRestartingRef = useRef(false);
 
-  // Keep refs in sync with state for callbacks
   isSpeakingRef.current = isSpeaking;
   isProcessingRef.current = isProcessing;
   isContinuousRef.current = isContinuousListening;
   quotaReachedRef.current = quotaReached;
 
-  // Auto-scroll transcript
   useEffect(() => {
     if (transcriptBottomRef.current) {
       transcriptBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [transcriptHistory, liveUserSpeech, isTranscriptOpen]);
 
-  // Sync language with prop
   useEffect(() => {
     if (currentTraditionId && LANGUAGE_OPTIONS.some((l) => l.id === currentTraditionId)) {
       setSelectedLanguage(currentTraditionId);
     }
   }, [currentTraditionId]);
 
-  // Proactively check mic permission state so we can show clear instructions
-  // if it's blocked, since JS cannot force-reset a "denied" permission -
-  // only the user can do that via browser site settings.
   useEffect(() => {
     if (typeof navigator !== 'undefined' && navigator.permissions) {
       navigator.permissions
@@ -206,13 +193,13 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         .then((status) => {
           if (status.state === 'denied') {
             setVoiceError(
-              'Microphone access is blocked for this site. Tap the icon next to the address bar → Permissions → Microphone → Allow, then reload the page.'
+              'Microphone access is blocked for this site. Tap the icon next to the address bar to Permissions to Microphone to Allow, then reload the page.'
             );
           }
           status.onchange = () => {
             if (status.state === 'denied') {
               setVoiceError(
-                'Microphone access is blocked for this site. Tap the icon next to the address bar → Permissions → Microphone → Allow, then reload the page.'
+                'Microphone access is blocked for this site. Tap the icon next to the address bar to Permissions to Microphone to Allow, then reload the page.'
               );
             } else if (status.state === 'granted') {
               setVoiceError(null);
@@ -220,12 +207,11 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           };
         })
         .catch(() => {
-          // Permissions API for microphone isn't supported in all browsers (e.g. Safari) - fail silently.
+          // Permissions API not supported in all browsers - fail silently.
         });
     }
   }, []);
 
-  // Connect to LiveKit (for remote audio sync & visualizer)
   useEffect(() => {
     let isSubscribed = true;
 
@@ -364,7 +350,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopAudioCapture();
@@ -374,12 +359,10 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Core: send text to /api/voice-agent, enforce token barrier, speak response
   const handleQuery = useCallback(
     async (queryText: string) => {
       if (!queryText.trim() || isProcessingRef.current) return;
 
-      // Token Barrier Check
       if (quotaReachedRef.current || tokensUsed >= MAX_SESSION_TOKENS) {
         const quotaMsg: TranscriptItem = {
           id: `quota-${Date.now()}`,
@@ -438,7 +421,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
         const data = await res.json();
 
-        // Check if server indicated quota barrier exceeded
         if (data.quotaExceeded) {
           recordTokens(data.tokensUsed || 100);
           setQuotaReached(true);
@@ -466,11 +448,10 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           return;
         }
 
-        // Record tokens consumed
         const consumed = data.tokensUsed || Math.ceil((queryText.length + 150) / 3);
         recordTokens(consumed);
 
-        const spokenText = data.spokenResponse || 'Stillness reveals inner truth.';
+        const spokenText = data.spokenResponse || "Let's keep practicing together.";
         const guruMessage: TranscriptItem = {
           id: `guru-${Date.now()}`,
           sender: 'guru',
@@ -498,7 +479,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
             setIsSpeaking(false);
             sound.playSuccessChime();
 
-            // Continuous VAD Listening auto-resumption
             if (isContinuousRef.current && !quotaReachedRef.current) {
               setTimeout(() => {
                 if (isContinuousRef.current && !isProcessingRef.current && !isSpeakingRef.current) {
@@ -514,16 +494,13 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         const fallback: TranscriptItem = {
           id: `guru-fallback-${Date.now()}`,
           sender: 'guru',
-          verse: 'विद्या ददाति विनयं विनयाद्याति पात्रताम् ।',
-          verseTranslation: 'True knowledge bestows humility, from humility comes worthiness.',
-          text: 'I sense the sincerity in your voice. Let us abide in the peace of wisdom.',
+          text: "Hmm, I didn't quite catch that. Let's try again - what would you like to talk about?",
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           topic: 'Voice Session',
         };
         setTranscriptHistory((prev) => [...prev, fallback]);
         setIsSpeaking(false);
 
-        // Resume continuous listening if active
         if (isContinuousRef.current && !quotaReachedRef.current) {
           setTimeout(() => {
             if (isContinuousRef.current && !isProcessingRef.current) {
@@ -539,7 +516,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     [selectedLanguage, transcriptHistory, onEarnXp, tokensUsed]
   );
 
-  // Start local mic with Voice Activity Detection (VAD) audio analyser
   const startAudioCapture = async () => {
     try {
       if (mediaStreamRef.current && audioContextRef.current) return;
@@ -564,7 +540,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.45;
-      source.connect(analyser); // Analyzer only (no echo back to speakers)
+      source.connect(analyser);
       analyserRef.current = analyser;
 
       const freqData = new Uint8Array(analyser.frequencyBinCount);
@@ -628,8 +604,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
   };
 
-  // Voice Activity Detection (VAD) Speech Recognition Engine
-  const startVADListening = useCallback(() => {
+  const startVADListening = useCallback((isResumingUtterance: boolean = false) => {
     if (quotaReachedRef.current) return;
     if (isProcessingRef.current || isSpeakingRef.current) return;
     if (recognitionRef.current) return;
@@ -640,17 +615,24 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setVoiceError('Voice recognition not supported in this browser — please use the text input below.');
+      setVoiceError('Voice recognition not supported in this browser - please use the text input below.');
       return;
     }
 
     setVoiceError(null);
-    accTranscriptRef.current = '';
-    speechStartedAtRef.current = null;
-    lastConfidenceRef.current = 1;
+
+    if (!isResumingUtterance) {
+      accTranscriptRef.current = '';
+      finalizedSoFarRef.current = '';
+      lastFinalTranscriptRef.current = '';
+      speechStartedAtRef.current = null;
+      lastConfidenceRef.current = 1;
+    }
 
     const discardNoiseTurn = () => {
       accTranscriptRef.current = '';
+      finalizedSoFarRef.current = '';
+      lastFinalTranscriptRef.current = '';
       speechStartedAtRef.current = null;
       lastConfidenceRef.current = 1;
       setLiveUserSpeech('');
@@ -669,6 +651,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
       isCommittingRef.current = true;
       accTranscriptRef.current = '';
+      finalizedSoFarRef.current = '';
+      lastFinalTranscriptRef.current = '';
       speechStartedAtRef.current = null;
       setIsVoiceActive(false);
       abortRecognition();
@@ -678,14 +662,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
     try {
       const recognition = new SpeechRecognition();
-      // NOTE: continuous=false on purpose. Android Chrome has a well-known
-      // bug where continuous=true causes the speech engine to repeatedly
-      // re-append the same recognized phrase to the results array (a
-      // duplication loop), producing garbled, massively repeated
-      // transcripts and much slower AI responses. We already manually
-      // restart recognition ourselves via onend below, so we don't need
-      // the browser's own continuous mode - this avoids the Android bug
-      // while still achieving continuous listening at the app level.
       recognition.continuous = false;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
@@ -722,14 +698,18 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           lastConfidenceRef.current = confidence / confidenceSamples;
         }
 
-        const combined = (final + interim).trim();
-        if (!combined) return;
+        lastFinalTranscriptRef.current = final.trim();
+
+        const combinedThisSession = (final + interim).trim();
+        if (!combinedThisSession) return;
 
         if (!speechStartedAtRef.current) {
           speechStartedAtRef.current = Date.now();
         }
-        accTranscriptRef.current = combined;
-        setLiveUserSpeech(combined);
+
+        const fullText = (finalizedSoFarRef.current + ' ' + combinedThisSession).trim();
+        accTranscriptRef.current = fullText;
+        setLiveUserSpeech(fullText);
 
         clearSilenceTimer();
         silenceTimerRef.current = setTimeout(() => {
@@ -764,19 +744,20 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         }
 
         if (isContinuousRef.current && !quotaReachedRef.current) {
-          const committed = commitUtteranceIfValid();
-          if (!committed) {
-            setTimeout(() => {
-              if (
-                isContinuousRef.current &&
-                !isProcessingRef.current &&
-                !isSpeakingRef.current &&
-                !recognitionRef.current
-              ) {
-                startVADListening();
-              }
-            }, 250);
-          }
+          finalizedSoFarRef.current = (finalizedSoFarRef.current + ' ' + lastFinalTranscriptRef.current).trim();
+          lastFinalTranscriptRef.current = '';
+
+          setTimeout(() => {
+            if (
+              isContinuousRef.current &&
+              !isProcessingRef.current &&
+              !isSpeakingRef.current &&
+              !recognitionRef.current &&
+              !isCommittingRef.current
+            ) {
+              startVADListening(true);
+            }
+          }, 150);
         } else {
           setIsListening(false);
           setIsVoiceActive(false);
@@ -790,14 +771,11 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       recognitionRef.current = null;
       console.error('[VoiceMode] VAD start error:', err);
       setIsListening(false);
-      setVoiceError('Could not start microphone — please check permissions or type below.');
+      setVoiceError('Could not start microphone - please check permissions or type below.');
       stopAudioCapture();
     }
   }, [selectedLanguage, handleQuery]);
 
-  // Initial continuous listening boot (only runs once the user has enabled
-  // continuous listening themselves via a tap - see isContinuousListening
-  // default above)
   useEffect(() => {
     if (isContinuousListening && !quotaReached) {
       abortRecognition();
@@ -805,7 +783,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       const timer = setTimeout(() => startVADListening(), 400);
       return () => clearTimeout(timer);
     }
-    // Intentionally omit startVADListening: recreating it was aborting the mic in a loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isContinuousListening, selectedLanguage, quotaReached]);
 
@@ -823,7 +800,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
 
     if (isContinuousListening) {
-      // Pause continuous listening
       setIsContinuousListening(false);
       isContinuousRef.current = false;
       abortRecognition();
@@ -831,8 +807,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       setIsListening(false);
       setIsVoiceActive(false);
     } else {
-      // Resume continuous listening - this tap IS the user gesture that
-      // allows mobile Chrome to properly show the mic permission prompt.
       setIsContinuousListening(true);
       isContinuousRef.current = true;
       startVADListening();
@@ -883,7 +857,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   return (
     <div className="relative flex flex-col items-center px-3 sm:px-6 pb-6 max-w-2xl mx-auto select-none animate-in fade-in duration-300">
 
-      {/* ── Top Navigation & Session Stats ── */}
       <div className="w-full flex items-center justify-between pt-2 pb-4 border-b border-white/10">
         <button
           id="btn-voice-back"
@@ -895,7 +868,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           <span className="text-xs uppercase font-medium tracking-wider hidden sm:inline-block">Back</span>
         </button>
 
-        {/* Center Mode Badge */}
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#C5A059]/10 border border-[#C5A059]/30 shadow-sm">
           <span className={`w-2 h-2 rounded-full ${isVoiceActive ? 'bg-emerald-400 animate-ping' : isListening ? 'bg-[#C5A059] animate-pulse' : 'bg-white/30'}`} />
           <span className="text-[11px] font-semibold tracking-[0.2em] text-[#C5A059] uppercase font-mono">
@@ -904,7 +876,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           <AudioLines className="w-3.5 h-3.5 text-[#C5A059]" />
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-1.5">
           <button
             id="btn-voice-reset"
@@ -917,7 +888,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </div>
       </div>
 
-      {/* ── Token Barrier / Session Quota Meter ── */}
       <div className="w-full mt-2.5 px-3.5 py-2 rounded-xl bg-[#141414]/80 border border-white/10 flex items-center justify-between text-xs backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Zap className={`w-3.5 h-3.5 ${quotaReached ? 'text-red-400' : 'text-[#C5A059]'}`} />
@@ -948,7 +918,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </div>
       </div>
 
-      {/* ── Quota Alert Banner (When Reached) ── */}
       {quotaReached && (
         <div className="w-full mt-2.5 p-3 rounded-xl bg-red-950/40 border border-red-500/40 flex items-center gap-2.5 text-xs text-red-200 animate-in fade-in">
           <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
@@ -959,7 +928,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </div>
       )}
 
-      {/* ── Language Selector ── */}
       <div className="relative z-30 my-2.5">
         <button
           id="btn-voice-language-selector"
@@ -998,7 +966,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      {/* ── Sacred Orb (Fixed Inside Circle Visualizer) ── */}
       <div className="relative my-2 sm:my-3 flex flex-col items-center">
         <VoicePoweredOrb
           audioLevel={audioLevel}
@@ -1008,7 +975,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           className="w-52 h-52 sm:w-60 sm:h-60 md:w-64 md:h-64"
         />
 
-        {/* Live speech badge */}
         {liveUserSpeech && isListening && !isSpeaking && !isProcessing && (
           <div className="mt-2.5 max-w-xs bg-black/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-[#C5A059]/50 text-xs text-[#DFC386] shadow-lg flex items-center gap-1.5 animate-pulse">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
@@ -1017,7 +983,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      {/* ── Voice Activity Detection (VAD) Continuous Controls ── */}
       <div className="flex flex-col items-center gap-2 my-2 w-full">
         <Button
           id="btn-voice-vad-toggle"
@@ -1071,7 +1036,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           )}
         </Button>
 
-        {/* Dynamic VAD Status Subtext */}
         <p className="text-[11px] text-white/50 font-light text-center px-2">
           {quotaReached
             ? 'Daily session quota exhausted. Quota resets tomorrow.'
@@ -1086,7 +1050,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
                     : 'Continuous listening is paused. Tap button above to resume.'}
         </p>
 
-        {/* Voice Error Notice */}
         {voiceError && (
           <div className="flex items-start gap-2 text-[11px] text-amber-400/90 bg-amber-950/30 border border-amber-500/20 rounded-xl px-3 py-2 max-w-sm text-center">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -1095,7 +1058,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      {/* ── Text Input Fallback ── */}
       <form
         onSubmit={handleTextSubmit}
         className="w-full flex items-center gap-2 mt-2 mb-3"
@@ -1118,7 +1080,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </button>
       </form>
 
-      {/* ── Session Transcript ── */}
       <div className="w-full bg-[#121212]/95 border border-white/10 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl">
         <button
           id="btn-toggle-transcript"
@@ -1189,13 +1150,11 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
                       </p>
                     )}
 
-                    {/* Spoken response */}
                     <div className={`text-xs sm:text-sm ${isAlert ? 'text-red-300 font-medium' : 'text-white/85'} leading-relaxed ${isGuru ? 'pl-2 border-l-2 border-[#C5A059]/40 mt-1.5' : ''
                       }`}>
                       {item.text}
                     </div>
 
-                    {/* Translation */}
                     {item.textTranslation && isGuru && !isAlert && (
                       <p className="text-[11px] text-white/45 italic mt-1 pl-2">
                         ↳ {item.textTranslation}
@@ -1206,7 +1165,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
               })
             )}
 
-            {/* Live streaming user speech in transcript */}
             {liveUserSpeech && isListening && !isSpeaking && !isProcessing && (
               <div className="text-right bg-[#C5A059]/10 p-2.5 rounded-xl border border-[#C5A059]/30 space-y-1 animate-pulse">
                 <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-wider text-[#C5A059]">
