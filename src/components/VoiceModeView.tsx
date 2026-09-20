@@ -787,7 +787,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isContinuousListening, selectedLanguage, quotaReached]);
 
-  const toggleContinuousListening = () => {
+ const toggleContinuousListening = async () => {
     sound.unlockAudio();
     sound.playTileClick();
 
@@ -801,17 +801,38 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
 
     if (isContinuousListening) {
+      // Pause continuous listening
       setIsContinuousListening(false);
       isContinuousRef.current = false;
       abortRecognition();
       stopAudioCapture();
       setIsListening(false);
       setIsVoiceActive(false);
-    } else {
-      setIsContinuousListening(true);
-      isContinuousRef.current = true;
-      startVADListening();
+      return;
     }
+
+    // Resuming - explicitly request mic permission FIRST, directly inside
+    // this tap handler. Relying on SpeechRecognition.start() alone to
+    // trigger the browser's permission prompt is unreliable on some
+    // Android Chrome versions - it can silently fail instead of showing
+    // the prompt. Requesting getUserMedia directly, as the very first
+    // thing we do in response to the tap, makes the browser reliably show
+    // its real permission UI (and gives us a clear error if denied).
+    setVoiceError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // We only needed this call to trigger/confirm the permission prompt.
+      // startAudioCapture() requests its own stream once VAD actually starts.
+      stream.getTracks().forEach((t) => t.stop());
+    } catch (err) {
+      console.warn('[VoiceMode] Mic permission request failed:', err);
+      setVoiceError('Microphone access is needed for voice mode. Please allow microphone access when prompted, then tap the button again.');
+      return;
+    }
+
+    setIsContinuousListening(true);
+    isContinuousRef.current = true;
+    startVADListening();
   };
 
   const handleResetSession = () => {
