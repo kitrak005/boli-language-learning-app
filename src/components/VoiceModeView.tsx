@@ -670,7 +670,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       const langObj = LANGUAGE_OPTIONS.find((l) => l.id === selectedLanguage);
       recognition.lang = langObj?.lang || 'en-US';
 
-      recognition.onstart = () => {
+     recognition.onstart = () => {
+        console.log('[VAKYA DEBUG] recognition.onstart fired - mic is now active');
         isRestartingRef.current = false;
         setIsListening(true);
         startAudioCapture();
@@ -720,10 +721,10 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
       recognition.onerror = (event: any) => {
         const err = event.error;
+        console.log('[VAKYA DEBUG] recognition.onerror fired:', err);
         if (err === 'aborted' || err === 'no-speech') return;
 
         console.warn('[VoiceMode VAD] Recognition event:', err);
-
         if (err === 'not-allowed') {
           setVoiceError('Microphone permission denied. Please allow mic access to use continuous voice.');
           setIsListening(false);
@@ -787,11 +788,13 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isContinuousListening, selectedLanguage, quotaReached]);
 
- const toggleContinuousListening = async () => {
+  const toggleContinuousListening = async () => {
+    console.log('[VAKYA DEBUG] toggleContinuousListening tapped, current isContinuousListening =', isContinuousListening);
     sound.unlockAudio();
     sound.playTileClick();
 
     if (quotaReached) {
+      console.log('[VAKYA DEBUG] blocked: quota reached');
       return;
     }
 
@@ -801,7 +804,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
 
     if (isContinuousListening) {
-      // Pause continuous listening
+      console.log('[VAKYA DEBUG] pausing continuous listening');
       setIsContinuousListening(false);
       isContinuousRef.current = false;
       abortRecognition();
@@ -811,25 +814,19 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       return;
     }
 
-    // Resuming - explicitly request mic permission FIRST, directly inside
-    // this tap handler. Relying on SpeechRecognition.start() alone to
-    // trigger the browser's permission prompt is unreliable on some
-    // Android Chrome versions - it can silently fail instead of showing
-    // the prompt. Requesting getUserMedia directly, as the very first
-    // thing we do in response to the tap, makes the browser reliably show
-    // its real permission UI (and gives us a clear error if denied).
+    console.log('[VAKYA DEBUG] requesting mic permission via getUserMedia...');
     setVoiceError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // We only needed this call to trigger/confirm the permission prompt.
-      // startAudioCapture() requests its own stream once VAD actually starts.
+      console.log('[VAKYA DEBUG] getUserMedia SUCCEEDED, permission granted');
       stream.getTracks().forEach((t) => t.stop());
-    } catch (err) {
-      console.warn('[VoiceMode] Mic permission request failed:', err);
+    } catch (err: any) {
+      console.error('[VAKYA DEBUG] getUserMedia FAILED:', err?.name, err?.message);
       setVoiceError('Microphone access is needed for voice mode. Please allow microphone access when prompted, then tap the button again.');
       return;
     }
 
+    console.log('[VAKYA DEBUG] setting isContinuousListening=true and calling startVADListening()');
     setIsContinuousListening(true);
     isContinuousRef.current = true;
     startVADListening();
