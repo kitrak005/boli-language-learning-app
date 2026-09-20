@@ -153,7 +153,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const transcriptBottomRef = useRef<HTMLDivElement | null>(null);
   const accTranscriptRef = useRef<string>('');
   const finalizedSoFarRef = useRef<string>('');
-  const lastFinalTranscriptRef = useRef<string>('');
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSpeakingRef = useRef<boolean>(false);
   const isProcessingRef = useRef<boolean>(false);
@@ -625,7 +624,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     if (!isResumingUtterance) {
       accTranscriptRef.current = '';
       finalizedSoFarRef.current = '';
-      lastFinalTranscriptRef.current = '';
+      
       speechStartedAtRef.current = null;
       lastConfidenceRef.current = 1;
     }
@@ -633,7 +632,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     const discardNoiseTurn = () => {
       accTranscriptRef.current = '';
       finalizedSoFarRef.current = '';
-      lastFinalTranscriptRef.current = '';
+     
       speechStartedAtRef.current = null;
       lastConfidenceRef.current = 1;
       setLiveUserSpeech('');
@@ -653,7 +652,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       isCommittingRef.current = true;
       accTranscriptRef.current = '';
       finalizedSoFarRef.current = '';
-      lastFinalTranscriptRef.current = '';
+      
       speechStartedAtRef.current = null;
       setIsVoiceActive(false);
       abortRecognition();
@@ -663,9 +662,14 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
     try {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
+      // continuous=true. The earlier duplication bug was caused by our own
+// result-processing loop re-scanning from index 0 every time. The real
+// fix is event.resultIndex-based accumulation below - continuous=false
+// has its own bug on some Android Chrome versions where onresult never
+// fires at all, which is what's breaking recognition right now.
+recognition.continuous = true;
+recognition.interimResults = true;
+recognition.maxAlternatives = 1;
 
       const langObj = LANGUAGE_OPTIONS.find((l) => l.id === selectedLanguage);
       recognition.lang = langObj?.lang || 'en-US';
@@ -678,46 +682,56 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       };
 
       recognition.onresult = (event: any) => {
-        if (isCommittingRef.current || isSpeakingRef.current || isProcessingRef.current) return;
+  if (isCommittingRef.current || isSpeakingRef.current || isProcessingRef.current) return;
 
-        let interim = '';
-        let final = '';
-        let confidence = 0;
-        let confidenceSamples = 0;
-        for (let i = 0; i < event.results.length; ++i) {
-          const alt = event.results[i][0];
-          if (typeof alt.confidence === 'number' && alt.confidence > 0) {
-            confidence += alt.confidence;
-            confidenceSamples += 1;
-          }
-          if (event.results[i].isFinal) {
-            final += alt.transcript + ' ';
-          } else {
-            interim += alt.transcript;
-          }
-        }
-        if (confidenceSamples > 0) {
-          lastConfidenceRef.current = confidence / confidenceSamples;
-        }
+  // Only scan results from event.resultIndex onward - the range that's
+  // NEW since the last onresult event. Scanning from 0 every time was
+  // the actual bug: it re-added every already-finalized phrase again
+  // and again, causing the repeated/duplicated transcript.
+  let newFinalChunk = '';
+  let currentInterim = '';
+  let confidence = 0;
+  let confidenceSamples = 0;
 
-        lastFinalTranscriptRef.current = final.trim();
+  for (let i = event.resultIndex; i < event.results.length; i++) {
+    const result = event.results[i];
+    const alt = result[0];
+    if (typeof alt.confidence === 'number' && alt.confidence > 0) {
+      confidence += alt.confidence;
+      confidenceSamples += 1;
+    }
+    if (result.isFinal) {
+      newFinalChunk += alt.transcript + ' ';
+    } else {
+      currentInterim += alt.transcript;
+    }
+  }
 
-        const combinedThisSession = (final + interim).trim();
-        if (!combinedThisSession) return;
+  if (confidenceSamples > 0) {
+    lastConfidenceRef.current = confidence / confidenceSamples;
+  }
 
-        if (!speechStartedAtRef.current) {
-          speechStartedAtRef.current = Date.now();
-        }
+  console.log('[VAKYA DEBUG] onresult fired, resultIndex:', event.resultIndex, 'newFinalChunk:', newFinalChunk, 'interim:', currentInterim);
 
-        const fullText = (finalizedSoFarRef.current + ' ' + combinedThisSession).trim();
-        accTranscriptRef.current = fullText;
-        setLiveUserSpeech(fullText);
+  if (newFinalChunk.trim()) {
+    finalizedSoFarRef.current = (finalizedSoFarRef.current + ' ' + newFinalChunk).trim();
+  }
 
-        clearSilenceTimer();
-        silenceTimerRef.current = setTimeout(() => {
-          commitUtteranceIfValid();
-        }, SILENCE_TIMEOUT_MS);
-      };
+  const fullText = (finalizedSoFarRef.current + ' ' + currentInterim).trim();
+  if (!fullText) return;
+
+  if (!speechStartedAtRef.current) {
+    speechStartedAtRef.current = Date.now();
+  }
+
+  accTranscriptRef.current = fullText;
+  setLiveUserSpeech(fullText);
+
+  clearSilenceTimer();
+  silenceTimerRef.current = setTimeout(() => {
+    commitUtteranceIfValid();
+  }, SILENCE_TIMEOUT_MS);
+};
 
       recognition.onerror = (event: any) => {
         const err = event.error;
@@ -744,12 +758,10 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           setIsVoiceActive(false);
           return;
         }
-
-        if (isContinuousRef.current && !quotaReachedRef.current) {
-          finalizedSoFarRef.current = (finalizedSoFarRef.current + ' ' + lastFinalTranscriptRef.current).trim();
-          lastFinalTranscriptRef.current = '';
-
-          setTimeout(() => {
+         if (isContinuousRef.current && !quotaReachedRef.current) {
+  // finalizedSoFarRef already contains everything finalized so far
+  // (accumulated directly in onresult), so nothing extra to fold in here.
+  setTimeout(() => {
             if (
               isContinuousRef.current &&
               !isProcessingRef.current &&
