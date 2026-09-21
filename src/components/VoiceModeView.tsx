@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
-import DebugOverlay from './DebugOverlay';
 import {
   Mic,
   MicOff,
@@ -62,27 +61,36 @@ const VAD_MIN_RMS = 0.028;
 const VAD_NOISE_MULTIPLIER = 2.1;
 const VAD_SPEECH_MARGIN = 0.018;
 const VAD_OPEN_FRAMES = 6;
-const VAD_CLOSE_FRAMES = 16;
-const VAD_MIN_SPEECH_MS = 280;
-const SILENCE_TIMEOUT_MS = 1500;
+const VAD_CLOSE_FRAMES = 28; // ~ SILENCE_TIMEOUT_MS worth of frames at ~60fps analysis tick, gives similar "pause before commit" feel
+const VAD_MIN_SPEECH_MS = 400;
 
-const NOISE_FILLERS = new Set([
-  'a', 'ah', 'ahh', 'uh', 'um', 'umm', 'hmm', 'hm', 'huh', 'oh', 'the', 'you',
-  'yeah', 'yes', 'ok', 'okay', 'mm', 'mmm', 'er', 'eh',
-]);
+function pickSupportedMimeType(): string {
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ];
+  for (const c of candidates) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) {
+      return c;
+    }
+  }
+  return '';
+}
 
-function isLikelyRealUtterance(text: string, confidence: number): boolean {
-  const trimmed = text.trim();
-  if (!trimmed) return false;
-  if (confidence > 0 && confidence < 0.25) return false;
-
-  const letters = trimmed.replace(/[^\p{L}\p{N}]+/gu, '');
-  if (letters.length < 4) return false;
-
-  const words = trimmed.split(/\s+/).filter(Boolean);
-  if (words.length === 1 && NOISE_FILLERS.has(words[0].toLowerCase())) return false;
-
-  return true;
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // Strip the "data:audio/webm;base64," prefix - we only want raw base64.
+      const base64 = result.split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
@@ -144,16 +152,12 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     });
   };
 
-  const recognitionRef = useRef<any>(null);
   const livekitRoomRef = useRef<Room | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const transcriptBottomRef = useRef<HTMLDivElement | null>(null);
-  const accTranscriptRef = useRef<string>('');
-  const finalizedSoFarRef = useRef<string>('');
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSpeakingRef = useRef<boolean>(false);
   const isProcessingRef = useRef<boolean>(false);
   const isContinuousRef = useRef<boolean>(false);
@@ -164,10 +168,16 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const speechFramesRef = useRef(0);
   const silenceFramesRef = useRef(0);
   const speechStartedAtRef = useRef<number | null>(null);
-  const lastEnergySpeechAtRef = useRef(0);
-  const lastConfidenceRef = useRef(1);
-  const isCommittingRef = useRef(false);
-  const isRestartingRef = useRef(false);
+
+  // MediaRecorder-based capture (replaces browser SpeechRecognition, which
+  // proved unreliable on Android: continuous=false never fired onresult on
+  // some devices, and continuous=true started hallucinating/repeating
+  // phrases on others. Recording raw audio and sending it to Gemini for
+  // transcription+response sidesteps the flaky Web Speech API entirely.)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const isRecordingRef = useRef(false);
+  const mimeTypeRef = useRef<string>('');
 
   isSpeakingRef.current = isSpeaking;
   isProcessingRef.current = isProcessing;
@@ -305,19 +315,19 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     };
   }, [selectedLanguage]);
 
-  const clearSilenceTimer = () => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-  };
-
   const stopAudioCapture = () => {
-    clearSilenceTimer();
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (_) { }
+    }
+    mediaRecorderRef.current = null;
+    isRecordingRef.current = false;
+    recordedChunksRef.current = [];
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((t) => t.stop());
       mediaStreamRef.current = null;
@@ -333,35 +343,21 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     speechStartedAtRef.current = null;
     setAudioLevel(0);
     setIsVoiceActive(false);
-  };
-
-  const abortRecognition = () => {
-    clearSilenceTimer();
-    if (recognitionRef.current) {
-      const rec = recognitionRef.current;
-      recognitionRef.current = null;
-      try {
-        rec.onstart = null;
-        rec.onresult = null;
-        rec.onerror = null;
-        rec.onend = null;
-        rec.abort();
-      } catch (_) { }
-    }
+    setIsListening(false);
   };
 
   useEffect(() => {
     return () => {
       stopAudioCapture();
-      abortRecognition();
       sound.stopSpeaking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleQuery = useCallback(
-    async (queryText: string) => {
-      if (!queryText.trim() || isProcessingRef.current) return;
+  // Send a recorded audio clip to the backend for transcription + response.
+  const handleAudioQuery = useCallback(
+    async (blob: Blob) => {
+      if (isProcessingRef.current) return;
 
       if (quotaReachedRef.current || tokensUsed >= MAX_SESSION_TOKENS) {
         const quotaMsg: TranscriptItem = {
@@ -375,41 +371,23 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         };
         setTranscriptHistory((prev) => [...prev, quotaMsg]);
         setQuotaReached(true);
-        setIsListening(false);
-        setIsVoiceActive(false);
-        setLiveUserSpeech('');
-        sound.speak(
-          'You have reached the end of your quota today.',
-          'sanskrit',
-          () => setIsSpeaking(true),
-          () => setIsSpeaking(false),
-          'You have reached the end of your quota today.'
-        );
         return;
       }
 
       sound.unlockAudio();
       setIsProcessing(true);
       setVoiceError(null);
-
-      const userMessage: TranscriptItem = {
-        id: `user-${Date.now()}`,
-        sender: 'user',
-        text: queryText.trim(),
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setTranscriptHistory((prev) => [...prev, userMessage]);
-      setLiveUserSpeech('');
-      setTextInput('');
-      accTranscriptRef.current = '';
+      setLiveUserSpeech('Listening to your recording...');
 
       try {
+        const base64Audio = await blobToBase64(blob);
+
         const res = await fetch('/api/voice-agent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            message: queryText.trim(),
+            audioBase64: base64Audio,
+            audioMimeType: mimeTypeRef.current || 'audio/webm',
             language: selectedLanguage,
             sessionTokensUsed: tokensUsed,
             conversationHistory: transcriptHistory.slice(-4).map((t) => ({
@@ -420,6 +398,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         });
 
         const data = await res.json();
+        setLiveUserSpeech('');
 
         if (data.quotaExceeded) {
           recordTokens(data.tokensUsed || 100);
@@ -434,35 +413,33 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
             isQuotaAlert: true,
           };
           setTranscriptHistory((prev) => [...prev, limitMsg]);
-          setIsSpeaking(true);
-          sound.speak(
-            'You have reached the end of your quota today.',
-            'sanskrit',
-            () => setIsSpeaking(true),
-            () => {
-              setIsSpeaking(false);
-              setIsListening(false);
-            },
-            'You have reached the end of your quota today.'
-          );
           return;
         }
 
-        const consumed = data.tokensUsed || Math.ceil((queryText.length + 150) / 3);
+        const userTranscript = data.transcript && data.transcript.trim()
+          ? data.transcript.trim()
+          : '(could not transcribe audio)';
+
+        const userMessage: TranscriptItem = {
+          id: `user-${Date.now()}`,
+          sender: 'user',
+          text: userTranscript,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setTranscriptHistory((prev) => [...prev, userMessage]);
+
+        const consumed = data.tokensUsed || Math.ceil((userTranscript.length + 150) / 3);
         recordTokens(consumed);
 
         const spokenText = data.spokenResponse || "Let's keep practicing together.";
         const guruMessage: TranscriptItem = {
           id: `guru-${Date.now()}`,
           sender: 'guru',
-          verse: data.verse,
-          verseTranslation: data.verseTranslation,
           text: spokenText,
           textTranslation: data.spokenResponseTranslation,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           topic: data.topic || 'Voice Session',
         };
-
         setTranscriptHistory((prev) => [...prev, guruMessage]);
 
         if (onEarnXp) onEarnXp(15);
@@ -478,11 +455,10 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           () => {
             setIsSpeaking(false);
             sound.playSuccessChime();
-
             if (isContinuousRef.current && !quotaReachedRef.current) {
               setTimeout(() => {
                 if (isContinuousRef.current && !isProcessingRef.current && !isSpeakingRef.current) {
-                  startVADListening();
+                  startListeningLoop();
                 }
               }, 900);
             }
@@ -490,7 +466,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           englishFallback
         );
       } catch (err) {
-        console.error('[VoiceMode] Query failed:', err);
+        console.error('[VoiceMode] Audio query failed:', err);
+        setLiveUserSpeech('');
         const fallback: TranscriptItem = {
           id: `guru-fallback-${Date.now()}`,
           sender: 'guru',
@@ -504,7 +481,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         if (isContinuousRef.current && !quotaReachedRef.current) {
           setTimeout(() => {
             if (isContinuousRef.current && !isProcessingRef.current) {
-              startVADListening();
+              startListeningLoop();
             }
           }, 600);
         }
@@ -516,10 +493,138 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     [selectedLanguage, transcriptHistory, onEarnXp, tokensUsed]
   );
 
-  const startAudioCapture = async () => {
+  const startRecordingClip = () => {
+    if (!mediaStreamRef.current || isRecordingRef.current) return;
+    const mimeType = mimeTypeRef.current;
     try {
-      if (mediaStreamRef.current && audioContextRef.current) return;
+      const recorder = mimeType
+        ? new MediaRecorder(mediaStreamRef.current, { mimeType })
+        : new MediaRecorder(mediaStreamRef.current);
+      recordedChunksRef.current = [];
 
+      recorder.ondataavailable = (e: BlobEvent) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        isRecordingRef.current = false;
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType || 'audio/webm' });
+        recordedChunksRef.current = [];
+        if (blob.size > 500) {
+          // Small blobs (a few hundred bytes) are essentially silence/noise -
+          // not worth sending to the backend.
+          handleAudioQuery(blob);
+        }
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      isRecordingRef.current = true;
+      setLiveUserSpeech('Recording...');
+    } catch (err) {
+      console.error('[VoiceMode] Could not start MediaRecorder:', err);
+    }
+  };
+
+  const stopRecordingClip = () => {
+    if (mediaRecorderRef.current && isRecordingRef.current) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (_) { }
+    }
+  };
+
+  // Amplitude-based Voice Activity Detection: analyses raw mic audio to
+  // decide when the user starts/stops talking, and drives MediaRecorder
+  // start/stop accordingly. This replaces browser SpeechRecognition, which
+  // proved unreliable across Android devices/browsers.
+  const runVadTick = () => {
+    if (!analyserRef.current) return;
+    const analyser = analyserRef.current;
+    const freqData = new Uint8Array(analyser.frequencyBinCount);
+    const timeData = new Uint8Array(analyser.fftSize);
+    analyser.getByteFrequencyData(freqData);
+    analyser.getByteTimeDomainData(timeData);
+
+    let sumSq = 0;
+    for (let i = 0; i < timeData.length; i++) {
+      const v = (timeData[i] - 128) / 128;
+      sumSq += v * v;
+    }
+    const rms = Math.sqrt(sumSq / timeData.length);
+    const freqAvg = freqData.reduce((s, v) => s + v, 0) / freqData.length;
+    setAudioLevel(Math.min(Math.max(rms * 5, freqAvg / 90), 1));
+
+    if (isSpeakingRef.current || isProcessingRef.current) {
+      energySpeechRef.current = false;
+      speechFramesRef.current = 0;
+      setIsVoiceActive(false);
+      animFrameRef.current = requestAnimationFrame(runVadTick);
+      return;
+    }
+
+    if (!energySpeechRef.current) {
+      noiseFloorRef.current = Math.min(0.04, noiseFloorRef.current * 0.97 + rms * 0.03);
+    }
+
+    const threshold = Math.max(
+      VAD_MIN_RMS,
+      noiseFloorRef.current * VAD_NOISE_MULTIPLIER + VAD_SPEECH_MARGIN
+    );
+
+    if (rms > threshold) {
+      speechFramesRef.current += 1;
+      silenceFramesRef.current = 0;
+      if (speechFramesRef.current >= VAD_OPEN_FRAMES) {
+        if (!energySpeechRef.current) {
+          energySpeechRef.current = true;
+          if (!speechStartedAtRef.current) {
+            speechStartedAtRef.current = Date.now();
+          }
+          setIsVoiceActive(true);
+          startRecordingClip();
+        }
+      }
+    } else {
+      silenceFramesRef.current += 1;
+      speechFramesRef.current = 0;
+      if (silenceFramesRef.current >= VAD_CLOSE_FRAMES && energySpeechRef.current) {
+        energySpeechRef.current = false;
+        setIsVoiceActive(false);
+        const startedAt = speechStartedAtRef.current;
+        const speechMs = startedAt ? Date.now() - startedAt : 0;
+        speechStartedAtRef.current = null;
+        if (speechMs >= VAD_MIN_SPEECH_MS) {
+          stopRecordingClip();
+        } else {
+          // Too short to be real speech - discard without sending.
+          if (mediaRecorderRef.current && isRecordingRef.current) {
+            try {
+              mediaRecorderRef.current.onstop = () => {
+                isRecordingRef.current = false;
+                recordedChunksRef.current = [];
+              };
+              mediaRecorderRef.current.stop();
+            } catch (_) { }
+          }
+          setLiveUserSpeech('');
+        }
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(runVadTick);
+  };
+
+  const startListeningLoop = useCallback(async () => {
+    if (quotaReachedRef.current) return;
+    if (isProcessingRef.current || isSpeakingRef.current) return;
+    if (mediaStreamRef.current) return; // already running
+
+    setVoiceError(null);
+
+    try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -529,10 +634,13 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         video: false,
       });
       mediaStreamRef.current = stream;
+      mimeTypeRef.current = pickSupportedMimeType();
 
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-
+      if (!AudioCtx) {
+        setVoiceError('Audio processing is not supported in this browser.');
+        return;
+      }
       const ctx = new AudioCtx();
       audioContextRef.current = ctx;
 
@@ -543,284 +651,29 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      const freqData = new Uint8Array(analyser.frequencyBinCount);
-      const timeData = new Uint8Array(analyser.fftSize);
-      const tick = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(freqData);
-        analyserRef.current.getByteTimeDomainData(timeData);
-
-        let sumSq = 0;
-        for (let i = 0; i < timeData.length; i++) {
-          const v = (timeData[i] - 128) / 128;
-          sumSq += v * v;
-        }
-        const rms = Math.sqrt(sumSq / timeData.length);
-        const freqAvg = freqData.reduce((s, v) => s + v, 0) / freqData.length;
-        setAudioLevel(Math.min(Math.max(rms * 5, freqAvg / 90), 1));
-
-        if (isSpeakingRef.current || isProcessingRef.current) {
-          energySpeechRef.current = false;
-          speechFramesRef.current = 0;
-          setIsVoiceActive(false);
-          animFrameRef.current = requestAnimationFrame(tick);
-          return;
-        }
-
-        if (!energySpeechRef.current) {
-          noiseFloorRef.current = Math.min(0.04, noiseFloorRef.current * 0.97 + rms * 0.03);
-        }
-
-        const threshold = Math.max(
-          VAD_MIN_RMS,
-          noiseFloorRef.current * VAD_NOISE_MULTIPLIER + VAD_SPEECH_MARGIN
-        );
-
-        if (rms > threshold) {
-          speechFramesRef.current += 1;
-          silenceFramesRef.current = 0;
-          if (speechFramesRef.current >= VAD_OPEN_FRAMES) {
-            energySpeechRef.current = true;
-            lastEnergySpeechAtRef.current = Date.now();
-            if (!speechStartedAtRef.current) {
-              speechStartedAtRef.current = Date.now();
-            }
-            setIsVoiceActive(true);
-          }
-        } else {
-          silenceFramesRef.current += 1;
-          speechFramesRef.current = 0;
-          if (silenceFramesRef.current >= VAD_CLOSE_FRAMES) {
-            energySpeechRef.current = false;
-            setIsVoiceActive(false);
-          }
-        }
-
-        animFrameRef.current = requestAnimationFrame(tick);
-      };
-      tick();
+      setIsListening(true);
+      runVadTick();
     } catch (err) {
-      console.warn('[VoiceMode] Mic capture error:', err);
-    }
-  };
-
-  const startVADListening = useCallback((isResumingUtterance: boolean = false) => {
-    if (quotaReachedRef.current) return;
-    if (isProcessingRef.current || isSpeakingRef.current) return;
-    if (recognitionRef.current) return;
-
-    isCommittingRef.current = false;
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setVoiceError('Voice recognition not supported in this browser - please use the text input below.');
-      return;
-    }
-
-    setVoiceError(null);
-
-    if (!isResumingUtterance) {
-      accTranscriptRef.current = '';
-      finalizedSoFarRef.current = '';
-
-      speechStartedAtRef.current = null;
-      lastConfidenceRef.current = 1;
-    }
-
-    const discardNoiseTurn = () => {
-      accTranscriptRef.current = '';
-      finalizedSoFarRef.current = '';
-
-      speechStartedAtRef.current = null;
-      lastConfidenceRef.current = 1;
-      setLiveUserSpeech('');
-    };
-
-    const commitUtteranceIfValid = () => {
-      if (isCommittingRef.current || isProcessingRef.current || isSpeakingRef.current) return false;
-      const finalText = accTranscriptRef.current.trim();
-      const startedAt = speechStartedAtRef.current;
-      const speechMs = startedAt ? Date.now() - startedAt : 0;
-
-      if (!finalText || speechMs < VAD_MIN_SPEECH_MS || !isLikelyRealUtterance(finalText, lastConfidenceRef.current)) {
-        discardNoiseTurn();
-        return false;
-      }
-
-      isCommittingRef.current = true;
-      accTranscriptRef.current = '';
-      finalizedSoFarRef.current = '';
-
-      speechStartedAtRef.current = null;
-      setIsVoiceActive(false);
-      abortRecognition();
-      handleQuery(finalText);
-      return true;
-    };
-
-    try {
-      const recognition = new SpeechRecognition();
-      // continuous=true. The earlier duplication bug was caused by our own
-      // result-processing loop re-scanning from index 0 every time. The real
-      // fix is event.resultIndex-based accumulation below - continuous=false
-      // has its own bug on some Android Chrome versions where onresult never
-      // fires at all, which is what's breaking recognition right now.
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-
-      const langObj = LANGUAGE_OPTIONS.find((l) => l.id === selectedLanguage);
-      recognition.lang = langObj?.lang || 'en-US';
-
-      recognition.onstart = () => {
-        console.log('[VAKYA DEBUG] recognition.onstart fired - mic is now active, lang:', recognition.lang);
-        isRestartingRef.current = false;
-        setIsListening(true);
-        // NOTE: startAudioCapture() used to be called here, but it opens its own
-        // separate getUserMedia() stream (for the audio-level visualizer) that
-        // runs concurrently with SpeechRecognition's own internal mic capture.
-        // On many Android devices, two simultaneous mic consumers cause the
-        // recognition engine to silently receive no usable audio - mic looks
-        // "active" but never produces any result. We no longer run a second
-        // concurrent stream; see onresult below for how isVoiceActive is now
-        // derived instead.
-      };
-
-      recognition.onresult = (event: any) => {
-        if (isCommittingRef.current || isSpeakingRef.current || isProcessingRef.current) return;
-
-        // Only scan results from event.resultIndex onward - the range that's
-        // NEW since the last onresult event. Scanning from 0 every time was
-        // the actual bug: it re-added every already-finalized phrase again
-        // and again, causing the repeated/duplicated transcript.
-        let newFinalChunk = '';
-        let currentInterim = '';
-        let confidence = 0;
-        let confidenceSamples = 0;
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          const alt = result[0];
-          if (typeof alt.confidence === 'number' && alt.confidence > 0) {
-            confidence += alt.confidence;
-            confidenceSamples += 1;
-          }
-          if (result.isFinal) {
-            newFinalChunk += alt.transcript + ' ';
-          } else {
-            currentInterim += alt.transcript;
-          }
-        }
-
-        if (confidenceSamples > 0) {
-          lastConfidenceRef.current = confidence / confidenceSamples;
-        }
-
-        console.log('[VAKYA DEBUG] onresult fired, resultIndex:', event.resultIndex, 'newFinalChunk:', newFinalChunk, 'interim:', currentInterim);
-        // Derive the "voice active" pulse from recognition activity itself,
-        // since we no longer run a separate concurrent audio-analysis stream.
-        if (newFinalChunk.trim() || currentInterim.trim()) {
-          setIsVoiceActive(true);
-          setAudioLevel(0.6);
-        }
-        if (newFinalChunk.trim()) {
-          finalizedSoFarRef.current = (finalizedSoFarRef.current + ' ' + newFinalChunk).trim();
-        }
-
-        const fullText = (finalizedSoFarRef.current + ' ' + currentInterim).trim();
-        if (!fullText) return;
-
-        if (!speechStartedAtRef.current) {
-          speechStartedAtRef.current = Date.now();
-        }
-
-        accTranscriptRef.current = fullText;
-        setLiveUserSpeech(fullText);
-
-        clearSilenceTimer();
-        silenceTimerRef.current = setTimeout(() => {
-          setIsVoiceActive(false);
-          setAudioLevel(0);
-          commitUtteranceIfValid();
-        }, SILENCE_TIMEOUT_MS);
-      };
-
-      recognition.onerror = (event: any) => {
-        const err = event.error;
-        console.log('[VAKYA DEBUG] recognition.onerror fired:', err);
-        if (err === 'aborted' || err === 'no-speech') return;
-
-        console.warn('[VoiceMode VAD] Recognition event:', err);
-        if (err === 'not-allowed') {
-          setVoiceError('Microphone permission denied. Please allow mic access to use continuous voice.');
-          setIsListening(false);
-          stopAudioCapture();
-          return;
-        }
-        if (err === 'network') {
-          setVoiceError('Network error connecting speech recognition. You can type queries below.');
-        }
-      };
-
-      recognition.onend = () => {
-        recognitionRef.current = null;
-
-        if (isCommittingRef.current || isProcessingRef.current || isSpeakingRef.current) {
-          setIsListening(false);
-          setIsVoiceActive(false);
-          return;
-        }
-        if (isContinuousRef.current && !quotaReachedRef.current) {
-          // finalizedSoFarRef already contains everything finalized so far
-          // (accumulated directly in onresult), so nothing extra to fold in here.
-          setTimeout(() => {
-            if (
-              isContinuousRef.current &&
-              !isProcessingRef.current &&
-              !isSpeakingRef.current &&
-              !recognitionRef.current &&
-              !isCommittingRef.current
-            ) {
-              startVADListening(true);
-            }
-          }, 150);
-        } else {
-          setIsListening(false);
-          setIsVoiceActive(false);
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      isRestartingRef.current = false;
-      recognitionRef.current = null;
-      console.error('[VoiceMode] VAD start error:', err);
+      console.error('[VoiceMode] Could not start listening:', err);
+      setVoiceError('Could not access the microphone - please check permissions or type below.');
       setIsListening(false);
-      setVoiceError('Could not start microphone - please check permissions or type below.');
-      stopAudioCapture();
     }
-  }, [selectedLanguage, handleQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (isContinuousListening && !quotaReached) {
-      abortRecognition();
-      isCommittingRef.current = false;
-      const timer = setTimeout(() => startVADListening(), 400);
+      const timer = setTimeout(() => startListeningLoop(), 400);
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isContinuousListening, selectedLanguage, quotaReached]);
 
   const toggleContinuousListening = async () => {
-    console.log('[VAKYA DEBUG] toggleContinuousListening tapped, current isContinuousListening =', isContinuousListening);
     sound.unlockAudio();
     sound.playTileClick();
 
     if (quotaReached) {
-      console.log('[VAKYA DEBUG] blocked: quota reached');
       return;
     }
 
@@ -830,37 +683,20 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
 
     if (isContinuousListening) {
-      console.log('[VAKYA DEBUG] pausing continuous listening');
       setIsContinuousListening(false);
       isContinuousRef.current = false;
-      abortRecognition();
       stopAudioCapture();
-      setIsListening(false);
-      setIsVoiceActive(false);
       return;
     }
 
-    console.log('[VAKYA DEBUG] requesting mic permission via getUserMedia...');
     setVoiceError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('[VAKYA DEBUG] getUserMedia SUCCEEDED, permission granted');
-      stream.getTracks().forEach((t) => t.stop());
-    } catch (err: any) {
-      console.error('[VAKYA DEBUG] getUserMedia FAILED:', err?.name, err?.message);
-      setVoiceError('Microphone access is needed for voice mode. Please allow microphone access when prompted, then tap the button again.');
-      return;
-    }
-
-    console.log('[VAKYA DEBUG] setting isContinuousListening=true and calling startVADListening()');
     setIsContinuousListening(true);
     isContinuousRef.current = true;
-    startVADListening();
+    startListeningLoop();
   };
 
   const handleResetSession = () => {
     sound.playTileClick();
-    abortRecognition();
     stopAudioCapture();
     sound.stopSpeaking();
     setTranscriptHistory([]);
@@ -871,7 +707,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     setIsProcessing(false);
 
     if (isContinuousListening && !quotaReached) {
-      setTimeout(() => startVADListening(), 300);
+      setTimeout(() => startListeningLoop(), 300);
     }
   };
 
@@ -883,14 +719,94 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     setQuotaReached(false);
     quotaReachedRef.current = false;
     if (isContinuousListening) {
-      setTimeout(() => startVADListening(), 200);
+      setTimeout(() => startListeningLoop(), 200);
     }
   };
 
-  const handleTextSubmit = (e: React.FormEvent) => {
+  // Text input still goes through the original text-based flow.
+  const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (textInput.trim() && !isProcessing) {
-      handleQuery(textInput.trim());
+    if (!textInput.trim() || isProcessing) return;
+    if (quotaReachedRef.current || tokensUsed >= MAX_SESSION_TOKENS) return;
+
+    const queryText = textInput.trim();
+    sound.unlockAudio();
+    setIsProcessing(true);
+    setVoiceError(null);
+
+    const userMessage: TranscriptItem = {
+      id: `user-${Date.now()}`,
+      sender: 'user',
+      text: queryText,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setTranscriptHistory((prev) => [...prev, userMessage]);
+    setTextInput('');
+
+    try {
+      const res = await fetch('/api/voice-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: queryText,
+          language: selectedLanguage,
+          sessionTokensUsed: tokensUsed,
+          conversationHistory: transcriptHistory.slice(-4).map((t) => ({ sender: t.sender, text: t.text })),
+        }),
+      });
+      const data = await res.json();
+
+      if (data.quotaExceeded) {
+        recordTokens(data.tokensUsed || 100);
+        setQuotaReached(true);
+        const limitMsg: TranscriptItem = {
+          id: `quota-${Date.now()}`,
+          sender: 'guru',
+          text: 'You have reached the end of your quota today.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          topic: 'Daily Quota Limit',
+          isQuotaAlert: true,
+        };
+        setTranscriptHistory((prev) => [...prev, limitMsg]);
+        return;
+      }
+
+      const consumed = data.tokensUsed || Math.ceil((queryText.length + 150) / 3);
+      recordTokens(consumed);
+
+      const spokenText = data.spokenResponse || "Let's keep practicing together.";
+      const guruMessage: TranscriptItem = {
+        id: `guru-${Date.now()}`,
+        sender: 'guru',
+        text: spokenText,
+        textTranslation: data.spokenResponseTranslation,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        topic: data.topic || 'Voice Session',
+      };
+      setTranscriptHistory((prev) => [...prev, guruMessage]);
+      if (onEarnXp) onEarnXp(15);
+
+      const ttsLangId = selectedLanguage === 'tamil' ? 'tamil' : 'sanskrit';
+      setIsSpeaking(true);
+      sound.speak(
+        spokenText,
+        ttsLangId,
+        () => setIsSpeaking(true),
+        () => setIsSpeaking(false),
+        data.spokenResponseTranslation || undefined
+      );
+    } catch (err) {
+      console.error('[VoiceMode] Text query failed:', err);
+      const fallback: TranscriptItem = {
+        id: `guru-fallback-${Date.now()}`,
+        sender: 'guru',
+        text: "Hmm, I didn't quite catch that. Let's try again - what would you like to talk about?",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        topic: 'Voice Session',
+      };
+      setTranscriptHistory((prev) => [...prev, fallback]);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1023,7 +939,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         {liveUserSpeech && isListening && !isSpeaking && !isProcessing && (
           <div className="mt-2.5 max-w-xs bg-black/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-[#C5A059]/50 text-xs text-[#DFC386] shadow-lg flex items-center gap-1.5 animate-pulse">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-            <span className="truncate">"{liveUserSpeech}"</span>
+            <span className="truncate">{liveUserSpeech}</span>
           </div>
         )}
       </div>
@@ -1210,21 +1126,10 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
               })
             )}
 
-            {liveUserSpeech && isListening && !isSpeaking && !isProcessing && (
-              <div className="text-right bg-[#C5A059]/10 p-2.5 rounded-xl border border-[#C5A059]/30 space-y-1 animate-pulse">
-                <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-wider text-[#C5A059]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Speaking Now • SEEKER</span>
-                </div>
-                <p className="text-xs sm:text-sm text-white/90 italic">"{liveUserSpeech}"</p>
-              </div>
-            )}
-
             <div ref={transcriptBottomRef} />
           </div>
         )}
       </div>
-      <DebugOverlay />
     </div>
   );
 };
