@@ -57,12 +57,12 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const MAX_SESSION_TOKENS = 2500;
-const VAD_MIN_RMS = 0.028;
-const VAD_NOISE_MULTIPLIER = 2.1;
-const VAD_SPEECH_MARGIN = 0.018;
-const VAD_OPEN_FRAMES = 6;
+const VAD_MIN_RMS = 0.018;
+const VAD_NOISE_MULTIPLIER = 1.6;
+const VAD_SPEECH_MARGIN = 0.010;
+const VAD_OPEN_FRAMES = 3;
 const VAD_CLOSE_FRAMES = 28; // ~ SILENCE_TIMEOUT_MS worth of frames at ~60fps analysis tick, gives similar "pause before commit" feel
-const VAD_MIN_SPEECH_MS = 400;
+const VAD_MIN_SPEECH_MS = 300;
 
 function pickSupportedMimeType(): string {
   const candidates = [
@@ -84,7 +84,6 @@ function blobToBase64(blob: Blob): Promise<string> {
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
-      // Strip the "data:audio/webm;base64," prefix - we only want raw base64.
       const base64 = result.split(',')[1] || '';
       resolve(base64);
     };
@@ -169,11 +168,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const silenceFramesRef = useRef(0);
   const speechStartedAtRef = useRef<number | null>(null);
 
-  // MediaRecorder-based capture (replaces browser SpeechRecognition, which
-  // proved unreliable on Android: continuous=false never fired onresult on
-  // some devices, and continuous=true started hallucinating/repeating
-  // phrases on others. Recording raw audio and sending it to Gemini for
-  // transcription+response sidesteps the flaky Web Speech API entirely.)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const isRecordingRef = useRef(false);
@@ -216,9 +210,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
             }
           };
         })
-        .catch(() => {
-          // Permissions API not supported in all browsers - fail silently.
-        });
+        .catch(() => { });
     }
   }, []);
 
@@ -354,7 +346,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Send a recorded audio clip to the backend for transcription + response.
   const handleAudioQuery = useCallback(
     async (blob: Blob) => {
       if (isProcessingRef.current) return;
@@ -513,8 +504,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         const blob = new Blob(recordedChunksRef.current, { type: mimeType || 'audio/webm' });
         recordedChunksRef.current = [];
         if (blob.size > 500) {
-          // Small blobs (a few hundred bytes) are essentially silence/noise -
-          // not worth sending to the backend.
           handleAudioQuery(blob);
         }
       };
@@ -536,12 +525,14 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
   };
 
-  // Amplitude-based Voice Activity Detection: analyses raw mic audio to
-  // decide when the user starts/stops talking, and drives MediaRecorder
-  // start/stop accordingly. This replaces browser SpeechRecognition, which
-  // proved unreliable across Android devices/browsers.
+  const isManualRecordingRef = useRef(false);
+
   const runVadTick = () => {
     if (!analyserRef.current) return;
+    if (isManualRecordingRef.current) {
+      animFrameRef.current = requestAnimationFrame(runVadTick);
+      return;
+    }
     const analyser = analyserRef.current;
     const freqData = new Uint8Array(analyser.frequencyBinCount);
     const timeData = new Uint8Array(analyser.fftSize);
@@ -599,7 +590,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         if (speechMs >= VAD_MIN_SPEECH_MS) {
           stopRecordingClip();
         } else {
-          // Too short to be real speech - discard without sending.
           if (mediaRecorderRef.current && isRecordingRef.current) {
             try {
               mediaRecorderRef.current.onstop = () => {
@@ -620,7 +610,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const startListeningLoop = useCallback(async () => {
     if (quotaReachedRef.current) return;
     if (isProcessingRef.current || isSpeakingRef.current) return;
-    if (mediaStreamRef.current) return; // already running
+    if (mediaStreamRef.current) return;
 
     setVoiceError(null);
 
@@ -695,6 +685,45 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     startListeningLoop();
   };
 
+  const [isManualRecording, setIsManualRecording] = useState(false);
+
+  const handleManualRecordStart = async () => {
+    if (quotaReachedRef.current || isProcessingRef.current || isSpeakingRef.current) return;
+    sound.unlockAudio();
+
+    if (!mediaStreamRef.current) {
+      await startListeningLoop();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+
+    if (mediaRecorderRef.current && isRecordingRef.current) {
+      try {
+        mediaRecorderRef.current.onstop = () => {
+          isRecordingRef.current = false;
+          recordedChunksRef.current = [];
+        };
+        mediaRecorderRef.current.stop();
+      } catch (_) { }
+    }
+
+    energySpeechRef.current = true;
+    isManualRecordingRef.current = true;
+    setIsManualRecording(true);
+    setIsVoiceActive(true);
+    startRecordingClip();
+  };
+
+  const handleManualRecordEnd = () => {
+    if (!isManualRecording) return;
+    isManualRecordingRef.current = false;
+    setIsManualRecording(false);
+    setIsVoiceActive(false);
+    energySpeechRef.current = false;
+    speechFramesRef.current = 0;
+    silenceFramesRef.current = 0;
+    stopRecordingClip();
+  };
+
   const handleResetSession = () => {
     sound.playTileClick();
     stopAudioCapture();
@@ -723,7 +752,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
   };
 
-  // Text input still goes through the original text-based flow.
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!textInput.trim() || isProcessing) return;
@@ -996,6 +1024,30 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
             </>
           )}
         </Button>
+
+        {!quotaReached && !isSpeaking && !isProcessing && (
+          <button
+            id="btn-voice-push-to-talk"
+            onMouseDown={handleManualRecordStart}
+            onMouseUp={handleManualRecordEnd}
+            onMouseLeave={handleManualRecordEnd}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              handleManualRecordStart();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              handleManualRecordEnd();
+            }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${isManualRecording
+              ? 'bg-red-500 text-white border-red-400 scale-105 shadow-lg shadow-red-500/30'
+              : 'bg-white/5 hover:bg-white/10 text-white/70 border-white/15'
+              }`}
+          >
+            <Mic className={`w-3.5 h-3.5 ${isManualRecording ? 'animate-pulse' : ''}`} />
+            <span>{isManualRecording ? 'Recording... release to send' : 'Hold to talk (if auto-detect misses you)'}</span>
+          </button>
+        )}
 
         <p className="text-[11px] text-white/50 font-light text-center px-2">
           {quotaReached
