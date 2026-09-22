@@ -1,7 +1,6 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic,
-  MicOff,
   Volume2,
   ChevronDown,
   ChevronUp,
@@ -14,7 +13,6 @@ import {
   Send,
   AlertCircle,
   ShieldAlert,
-  Radio,
   Zap,
 } from 'lucide-react';
 import {
@@ -27,7 +25,7 @@ import {
   createAudioAnalyser,
 } from 'livekit-client';
 import { VoicePoweredOrb } from '@/components/ui/voice-powered-orb';
-import { Button } from '@/components/ui/button';
+import { ShimmerButton } from '@/components/ui/shimmer-button';
 import { TraditionId } from '../types';
 import { sound } from '../utils/audio';
 
@@ -57,12 +55,7 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const MAX_SESSION_TOKENS = 2500;
-const VAD_MIN_RMS = 0.018;
-const VAD_NOISE_MULTIPLIER = 1.6;
-const VAD_SPEECH_MARGIN = 0.010;
-const VAD_OPEN_FRAMES = 3;
-const VAD_CLOSE_FRAMES = 28; // ~ SILENCE_TIMEOUT_MS worth of frames at ~60fps analysis tick, gives similar "pause before commit" feel
-const VAD_MIN_SPEECH_MS = 300;
+const MIN_RECORDING_MS = 300; // taps shorter than this are discarded as accidental
 
 function pickSupportedMimeType(): string {
   const candidates = [
@@ -101,9 +94,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     currentTraditionId || 'sanskrit'
   );
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [isContinuousListening, setIsContinuousListening] = useState<boolean>(false);
-  const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -159,23 +150,17 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const transcriptBottomRef = useRef<HTMLDivElement | null>(null);
   const isSpeakingRef = useRef<boolean>(false);
   const isProcessingRef = useRef<boolean>(false);
-  const isContinuousRef = useRef<boolean>(false);
   const quotaReachedRef = useRef<boolean>(quotaReached);
   const textInputRef = useRef<HTMLInputElement | null>(null);
-  const energySpeechRef = useRef(false);
-  const noiseFloorRef = useRef(0.018);
-  const speechFramesRef = useRef(0);
-  const silenceFramesRef = useRef(0);
-  const speechStartedAtRef = useRef<number | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const isRecordingRef = useRef(false);
   const mimeTypeRef = useRef<string>('');
+  const recordStartAtRef = useRef<number | null>(null);
 
   isSpeakingRef.current = isSpeaking;
   isProcessingRef.current = isProcessing;
-  isContinuousRef.current = isContinuousListening;
   quotaReachedRef.current = quotaReached;
 
   useEffect(() => {
@@ -210,7 +195,9 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
             }
           };
         })
-        .catch(() => { });
+        .catch(() => {
+          // Permissions API not supported in all browsers - fail silently.
+        });
     }
   }, []);
 
@@ -307,7 +294,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     };
   }, [selectedLanguage]);
 
-  const stopAudioCapture = () => {
+  const teardownMic = () => {
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -329,18 +316,13 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       audioContextRef.current = null;
     }
     analyserRef.current = null;
-    energySpeechRef.current = false;
-    speechFramesRef.current = 0;
-    silenceFramesRef.current = 0;
-    speechStartedAtRef.current = null;
     setAudioLevel(0);
-    setIsVoiceActive(false);
-    setIsListening(false);
+    setIsRecording(false);
   };
 
   useEffect(() => {
     return () => {
-      stopAudioCapture();
+      teardownMic();
       sound.stopSpeaking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -446,13 +428,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           () => {
             setIsSpeaking(false);
             sound.playSuccessChime();
-            if (isContinuousRef.current && !quotaReachedRef.current) {
-              setTimeout(() => {
-                if (isContinuousRef.current && !isProcessingRef.current && !isSpeakingRef.current) {
-                  startListeningLoop();
-                }
-              }, 900);
-            }
           },
           englishFallback
         );
@@ -468,14 +443,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         };
         setTranscriptHistory((prev) => [...prev, fallback]);
         setIsSpeaking(false);
-
-        if (isContinuousRef.current && !quotaReachedRef.current) {
-          setTimeout(() => {
-            if (isContinuousRef.current && !isProcessingRef.current) {
-              startListeningLoop();
-            }
-          }, 600);
-        }
       } finally {
         setIsProcessing(false);
       }
@@ -483,6 +450,57 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedLanguage, transcriptHistory, onEarnXp, tokensUsed]
   );
+
+  const ensureMicReady = async (): Promise<boolean> => {
+    if (mediaStreamRef.current) return true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      mediaStreamRef.current = stream;
+      mimeTypeRef.current = pickSupportedMimeType();
+
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        audioContextRef.current = ctx;
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.45;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+      }
+      return true;
+    } catch (err) {
+      console.error('[VoiceMode] Could not access microphone:', err);
+      setVoiceError('Could not access the microphone - please check permissions or type below.');
+      return false;
+    }
+  };
+
+  const runLevelMeter = () => {
+    if (!analyserRef.current || !isRecordingRef.current) {
+      setAudioLevel(0);
+      return;
+    }
+    const analyser = analyserRef.current;
+    const timeData = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(timeData);
+    let sumSq = 0;
+    for (let i = 0; i < timeData.length; i++) {
+      const v = (timeData[i] - 128) / 128;
+      sumSq += v * v;
+    }
+    const rms = Math.sqrt(sumSq / timeData.length);
+    setAudioLevel(Math.min(rms * 5, 1));
+    animFrameRef.current = requestAnimationFrame(runLevelMeter);
+  };
 
   const startRecordingClip = () => {
     if (!mediaStreamRef.current || isRecordingRef.current) return;
@@ -501,232 +519,57 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
       recorder.onstop = () => {
         isRecordingRef.current = false;
+        const heldMs = recordStartAtRef.current ? Date.now() - recordStartAtRef.current : 0;
+        recordStartAtRef.current = null;
         const blob = new Blob(recordedChunksRef.current, { type: mimeType || 'audio/webm' });
         recordedChunksRef.current = [];
-        if (blob.size > 500) {
+        if (blob.size > 500 && heldMs >= MIN_RECORDING_MS) {
           handleAudioQuery(blob);
+        } else {
+          setLiveUserSpeech('');
         }
       };
 
       recorder.start();
       mediaRecorderRef.current = recorder;
       isRecordingRef.current = true;
+      recordStartAtRef.current = Date.now();
       setLiveUserSpeech('Recording...');
+      runLevelMeter();
     } catch (err) {
       console.error('[VoiceMode] Could not start MediaRecorder:', err);
     }
   };
 
-  const stopRecordingClip = () => {
-    if (mediaRecorderRef.current && isRecordingRef.current) {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch (_) { }
-    }
-  };
-
-  const isManualRecordingRef = useRef(false);
-
-  const runVadTick = () => {
-    if (!analyserRef.current) return;
-    if (isManualRecordingRef.current) {
-      animFrameRef.current = requestAnimationFrame(runVadTick);
-      return;
-    }
-    const analyser = analyserRef.current;
-    const freqData = new Uint8Array(analyser.frequencyBinCount);
-    const timeData = new Uint8Array(analyser.fftSize);
-    analyser.getByteFrequencyData(freqData);
-    analyser.getByteTimeDomainData(timeData);
-
-    let sumSq = 0;
-    for (let i = 0; i < timeData.length; i++) {
-      const v = (timeData[i] - 128) / 128;
-      sumSq += v * v;
-    }
-    const rms = Math.sqrt(sumSq / timeData.length);
-    const freqAvg = freqData.reduce((s, v) => s + v, 0) / freqData.length;
-    setAudioLevel(Math.min(Math.max(rms * 5, freqAvg / 90), 1));
-
-    if (isSpeakingRef.current || isProcessingRef.current) {
-      energySpeechRef.current = false;
-      speechFramesRef.current = 0;
-      setIsVoiceActive(false);
-      animFrameRef.current = requestAnimationFrame(runVadTick);
-      return;
-    }
-
-    if (!energySpeechRef.current) {
-      noiseFloorRef.current = Math.min(0.04, noiseFloorRef.current * 0.97 + rms * 0.03);
-    }
-
-    const threshold = Math.max(
-      VAD_MIN_RMS,
-      noiseFloorRef.current * VAD_NOISE_MULTIPLIER + VAD_SPEECH_MARGIN
-    );
-
-    if (rms > threshold) {
-      speechFramesRef.current += 1;
-      silenceFramesRef.current = 0;
-      if (speechFramesRef.current >= VAD_OPEN_FRAMES) {
-        if (!energySpeechRef.current) {
-          energySpeechRef.current = true;
-          if (!speechStartedAtRef.current) {
-            speechStartedAtRef.current = Date.now();
-          }
-          setIsVoiceActive(true);
-          startRecordingClip();
-        }
-      }
-    } else {
-      silenceFramesRef.current += 1;
-      speechFramesRef.current = 0;
-      if (silenceFramesRef.current >= VAD_CLOSE_FRAMES && energySpeechRef.current) {
-        energySpeechRef.current = false;
-        setIsVoiceActive(false);
-        const startedAt = speechStartedAtRef.current;
-        const speechMs = startedAt ? Date.now() - startedAt : 0;
-        speechStartedAtRef.current = null;
-        if (speechMs >= VAD_MIN_SPEECH_MS) {
-          stopRecordingClip();
-        } else {
-          if (mediaRecorderRef.current && isRecordingRef.current) {
-            try {
-              mediaRecorderRef.current.onstop = () => {
-                isRecordingRef.current = false;
-                recordedChunksRef.current = [];
-              };
-              mediaRecorderRef.current.stop();
-            } catch (_) { }
-          }
-          setLiveUserSpeech('');
-        }
-      }
-    }
-
-    animFrameRef.current = requestAnimationFrame(runVadTick);
-  };
-
-  const startListeningLoop = useCallback(async () => {
-    if (quotaReachedRef.current) return;
-    if (isProcessingRef.current || isSpeakingRef.current) return;
-    if (mediaStreamRef.current) return;
-
-    setVoiceError(null);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
-      mediaStreamRef.current = stream;
-      mimeTypeRef.current = pickSupportedMimeType();
-
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) {
-        setVoiceError('Audio processing is not supported in this browser.');
-        return;
-      }
-      const ctx = new AudioCtx();
-      audioContextRef.current = ctx;
-
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.45;
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
-      setIsListening(true);
-      runVadTick();
-    } catch (err) {
-      console.error('[VoiceMode] Could not start listening:', err);
-      setVoiceError('Could not access the microphone - please check permissions or type below.');
-      setIsListening(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (isContinuousListening && !quotaReached) {
-      const timer = setTimeout(() => startListeningLoop(), 400);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isContinuousListening, selectedLanguage, quotaReached]);
-
-  const toggleContinuousListening = async () => {
-    sound.unlockAudio();
-    sound.playTileClick();
-
-    if (quotaReached) {
-      return;
-    }
-
-    if (isSpeaking) {
-      sound.stopSpeaking();
-      setIsSpeaking(false);
-    }
-
-    if (isContinuousListening) {
-      setIsContinuousListening(false);
-      isContinuousRef.current = false;
-      stopAudioCapture();
-      return;
-    }
-
-    setVoiceError(null);
-    setIsContinuousListening(true);
-    isContinuousRef.current = true;
-    startListeningLoop();
-  };
-
-  const [isManualRecording, setIsManualRecording] = useState(false);
-
-  const handleManualRecordStart = async () => {
+  const handleRecordStart = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     if (quotaReachedRef.current || isProcessingRef.current || isSpeakingRef.current) return;
+    if (isRecordingRef.current) return;
+
     sound.unlockAudio();
+    setVoiceError(null);
 
-    if (!mediaStreamRef.current) {
-      await startListeningLoop();
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
+    const ready = await ensureMicReady();
+    if (!ready) return;
 
-    if (mediaRecorderRef.current && isRecordingRef.current) {
-      try {
-        mediaRecorderRef.current.onstop = () => {
-          isRecordingRef.current = false;
-          recordedChunksRef.current = [];
-        };
-        mediaRecorderRef.current.stop();
-      } catch (_) { }
-    }
-
-    energySpeechRef.current = true;
-    isManualRecordingRef.current = true;
-    setIsManualRecording(true);
-    setIsVoiceActive(true);
+    setIsRecording(true);
     startRecordingClip();
   };
 
-  const handleManualRecordEnd = () => {
-    if (!isManualRecording) return;
-    isManualRecordingRef.current = false;
-    setIsManualRecording(false);
-    setIsVoiceActive(false);
-    energySpeechRef.current = false;
-    speechFramesRef.current = 0;
-    silenceFramesRef.current = 0;
-    stopRecordingClip();
+  const handleRecordEnd = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    if (!isRecordingRef.current) return;
+    setIsRecording(false);
+    if (mediaRecorderRef.current) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (_) { }
+    }
   };
 
   const handleResetSession = () => {
     sound.playTileClick();
-    stopAudioCapture();
+    teardownMic();
     sound.stopSpeaking();
     setTranscriptHistory([]);
     setLiveUserSpeech('');
@@ -734,10 +577,6 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     setVoiceError(null);
     setIsSpeaking(false);
     setIsProcessing(false);
-
-    if (isContinuousListening && !quotaReached) {
-      setTimeout(() => startListeningLoop(), 300);
-    }
   };
 
   const handleResetQuotaForTesting = () => {
@@ -747,11 +586,9 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     setTokensUsed(0);
     setQuotaReached(false);
     quotaReachedRef.current = false;
-    if (isContinuousListening) {
-      setTimeout(() => startListeningLoop(), 200);
-    }
   };
 
+  // Text input still goes through the original text-based flow.
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!textInput.trim() || isProcessing) return;
@@ -843,6 +680,18 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
 
   const quotaPercent = Math.min(100, Math.round((tokensUsed / MAX_SESSION_TOKENS) * 100));
 
+  const buttonLabel = quotaReached
+    ? 'Quota Exceeded'
+    : isRecording
+      ? 'Recording... release to send'
+      : isProcessing
+        ? 'Synthesizing response…'
+        : isSpeaking
+          ? 'Speaking Response…'
+          : 'Hold to Talk';
+
+  const buttonDisabled = quotaReached || isProcessing || isSpeaking;
+
   return (
     <div className="relative flex flex-col items-center px-3 sm:px-6 pb-6 max-w-2xl mx-auto select-none animate-in fade-in duration-300">
 
@@ -858,7 +707,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         </button>
 
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#C5A059]/10 border border-[#C5A059]/30 shadow-sm">
-          <span className={`w-2 h-2 rounded-full ${isVoiceActive ? 'bg-emerald-400 animate-ping' : isListening ? 'bg-[#C5A059] animate-pulse' : 'bg-white/30'}`} />
+          <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-emerald-400 animate-ping' : 'bg-white/30'}`} />
           <span className="text-[11px] font-semibold tracking-[0.2em] text-[#C5A059] uppercase font-mono">
             VĀK VOICE SESSION
           </span>
@@ -959,12 +808,12 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         <VoicePoweredOrb
           audioLevel={audioLevel}
           isSpeaking={isSpeaking}
-          isListening={isListening}
+          isListening={isRecording}
           isActive={!quotaReached}
           className="w-52 h-52 sm:w-60 sm:h-60 md:w-64 md:h-64"
         />
 
-        {liveUserSpeech && isListening && !isSpeaking && !isProcessing && (
+        {liveUserSpeech && isRecording && !isSpeaking && !isProcessing && (
           <div className="mt-2.5 max-w-xs bg-black/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-[#C5A059]/50 text-xs text-[#DFC386] shadow-lg flex items-center gap-1.5 animate-pulse">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
             <span className="truncate">{liveUserSpeech}</span>
@@ -972,95 +821,54 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         )}
       </div>
 
-      <div className="flex flex-col items-center gap-2 my-2 w-full">
-        <Button
-          id="btn-voice-vad-toggle"
-          variant="gold"
-          size="pill"
-          onClick={toggleContinuousListening}
-          disabled={quotaReached || isProcessing}
-          className={`flex items-center gap-2.5 px-8 py-3.5 rounded-full text-sm font-bold shadow-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${quotaReached
-            ? 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-            : isVoiceActive
-              ? 'bg-gradient-to-r from-emerald-400 to-teal-500 text-black animate-pulse shadow-emerald-500/30 scale-105'
-              : isSpeaking
-                ? 'bg-gradient-to-r from-amber-400 to-emerald-500 text-black shadow-emerald-500/20'
+      <div className="flex flex-col items-center gap-3 my-2 w-full">
+        <ShimmerButton
+          id="btn-voice-hold-to-talk"
+          onMouseDown={handleRecordStart}
+          onMouseUp={handleRecordEnd}
+          onMouseLeave={handleRecordEnd}
+          onTouchStart={handleRecordStart}
+          onTouchEnd={handleRecordEnd}
+          disabled={buttonDisabled}
+          background={
+            quotaReached
+              ? 'rgba(63,63,70,1)'
+              : isRecording
+                ? 'linear-gradient(135deg, rgba(16,185,129,1), rgba(20,184,166,1))'
                 : isProcessing
-                  ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-purple-500/30'
-                  : isContinuousListening
-                    ? 'bg-gradient-to-r from-[#DFC386] to-[#C5A059] text-black hover:brightness-110 shadow-[#C5A059]/30'
-                    : 'bg-zinc-800 hover:bg-zinc-700 text-white/80 border border-white/10'
-            }`}
+                  ? 'linear-gradient(135deg, rgba(168,85,247,1), rgba(99,102,241,1))'
+                  : isSpeaking
+                    ? 'linear-gradient(135deg, rgba(251,191,36,1), rgba(16,185,129,1))'
+                    : 'linear-gradient(135deg, rgba(223,195,134,1), rgba(197,160,89,1))'
+          }
+          shimmerColor={quotaReached ? '#888888' : '#ffffff'}
+          className={`px-10 py-4 text-sm font-bold uppercase tracking-wider select-none ${buttonDisabled ? 'opacity-60 cursor-not-allowed' : ''
+            } ${isRecording ? 'scale-105' : ''}`}
         >
-          {quotaReached ? (
-            <>
-              <ShieldAlert className="w-4 h-4 text-red-400" />
-              <span>Quota Exceeded</span>
-            </>
-          ) : isVoiceActive ? (
-            <>
-              <Radio className="w-4 h-4 animate-ping text-black" />
-              <span>Voice Detected • Listening…</span>
-            </>
-          ) : isSpeaking ? (
-            <>
-              <Volume2 className="w-4 h-4 animate-pulse" />
-              <span>Speaking Response • Tap to Mute</span>
-            </>
-          ) : isProcessing ? (
-            <>
+          <span className="flex items-center gap-2.5">
+            {quotaReached ? (
+              <ShieldAlert className="w-4 h-4 text-red-300" />
+            ) : isProcessing ? (
               <Sparkles className="w-4 h-4 animate-spin" />
-              <span>Synthesizing response…</span>
-            </>
-          ) : isContinuousListening ? (
-            <>
-              <Mic className="w-4 h-4 text-black animate-pulse" />
-              <span>Continuous VAD Active • Listening</span>
-            </>
-          ) : (
-            <>
-              <MicOff className="w-4 h-4" />
-              <span>Resume Continuous Listening</span>
-            </>
-          )}
-        </Button>
-
-        {!quotaReached && !isSpeaking && !isProcessing && (
-          <button
-            id="btn-voice-push-to-talk"
-            onMouseDown={handleManualRecordStart}
-            onMouseUp={handleManualRecordEnd}
-            onMouseLeave={handleManualRecordEnd}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              handleManualRecordStart();
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              handleManualRecordEnd();
-            }}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${isManualRecording
-              ? 'bg-red-500 text-white border-red-400 scale-105 shadow-lg shadow-red-500/30'
-              : 'bg-white/5 hover:bg-white/10 text-white/70 border-white/15'
-              }`}
-          >
-            <Mic className={`w-3.5 h-3.5 ${isManualRecording ? 'animate-pulse' : ''}`} />
-            <span>{isManualRecording ? 'Recording... release to send' : 'Hold to talk (if auto-detect misses you)'}</span>
-          </button>
-        )}
+            ) : isSpeaking ? (
+              <Volume2 className="w-4 h-4 animate-pulse" />
+            ) : (
+              <Mic className={`w-4 h-4 ${isRecording ? 'animate-pulse' : ''}`} />
+            )}
+            <span>{buttonLabel}</span>
+          </span>
+        </ShimmerButton>
 
         <p className="text-[11px] text-white/50 font-light text-center px-2">
           {quotaReached
             ? 'Daily session quota exhausted. Quota resets tomorrow.'
-            : isVoiceActive
-              ? 'Voice activity detected — pause speaking to send query.'
+            : isRecording
+              ? 'Release the button when you\'re done speaking.'
               : isSpeaking
                 ? 'Playing audio response in selected tradition.'
                 : isProcessing
                   ? 'Formulating response from classical corpus.'
-                  : isContinuousListening
-                    ? 'Continuous Voice Activity Detection is active. Speak naturally at any time.'
-                    : 'Continuous listening is paused. Tap button above to resume.'}
+                  : 'Press and hold the button, speak, then release to send.'}
         </p>
 
         {voiceError && (
@@ -1122,7 +930,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
             {transcriptHistory.length === 0 ? (
               <div className="text-center py-6 text-white/40 text-xs">
                 <p className="font-medium text-white/60">Voice Assistant Ready</p>
-                <p className="mt-1 text-[11px]">Continuous Voice Activity Detection (VAD) is active. Speak in your chosen language or select a prompt.</p>
+                <p className="mt-1 text-[11px]">Press and hold the button above, speak in your chosen language, then release to send.</p>
               </div>
             ) : (
               transcriptHistory.map((item) => {
