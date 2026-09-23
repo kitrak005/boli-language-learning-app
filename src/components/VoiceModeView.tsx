@@ -158,6 +158,8 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const isRecordingRef = useRef(false);
   const mimeTypeRef = useRef<string>('');
   const recordStartAtRef = useRef<number | null>(null);
+  const isStartingRef = useRef(false);
+  const pendingStopRef = useRef(false);
 
   isSpeakingRef.current = isSpeaking;
   isProcessingRef.current = isProcessing;
@@ -544,20 +546,41 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const handleRecordStart = async (e?: React.SyntheticEvent) => {
     e?.preventDefault();
     if (quotaReachedRef.current || isProcessingRef.current || isSpeakingRef.current) return;
-    if (isRecordingRef.current) return;
+    if (isRecordingRef.current || isStartingRef.current) return;
 
     sound.unlockAudio();
     setVoiceError(null);
+    isStartingRef.current = true;
+    pendingStopRef.current = false;
 
     const ready = await ensureMicReady();
-    if (!ready) return;
+    if (!ready) {
+      isStartingRef.current = false;
+      return;
+    }
 
     setIsRecording(true);
     startRecordingClip();
+    isStartingRef.current = false;
+
+    // If the user already released before the mic finished getting ready
+    // (a fast desktop click can beat the async getUserMedia call - this
+    // race is what caused recording to get permanently stuck after the
+    // first use), honor that release right now instead of losing it.
+    if (pendingStopRef.current) {
+      pendingStopRef.current = false;
+      handleRecordEnd();
+    }
   };
 
   const handleRecordEnd = (e?: React.SyntheticEvent) => {
     e?.preventDefault();
+    if (isStartingRef.current) {
+      // Release happened before recording actually started - remember to
+      // stop the instant it does, rather than silently dropping it.
+      pendingStopRef.current = true;
+      return;
+    }
     if (!isRecordingRef.current) return;
     setIsRecording(false);
     if (mediaRecorderRef.current) {
