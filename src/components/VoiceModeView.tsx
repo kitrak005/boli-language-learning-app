@@ -543,51 +543,37 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
     }
   };
 
-  const handleRecordStart = async (e?: React.SyntheticEvent) => {
+  // Click-to-toggle instead of press-and-hold: much more reliable across
+  // mouse, trackpad, and touch. A hold-based interaction is prone to
+  // accidental short clicks being mistaken for a real hold (mousedown +
+  // near-instant mouseup looks identical to intentionally letting go
+  // early), and to platform-specific mouse-event race conditions. A
+  // simple click-to-start / click-to-stop toggle has none of those issues.
+  const handleTalkButtonClick = async (e?: React.SyntheticEvent) => {
     e?.preventDefault();
     if (quotaReachedRef.current || isProcessingRef.current || isSpeakingRef.current) return;
-    if (isRecordingRef.current || isStartingRef.current) return;
 
     sound.unlockAudio();
     setVoiceError(null);
-    isStartingRef.current = true;
-    pendingStopRef.current = false;
 
-    const ready = await ensureMicReady();
-    if (!ready) {
-      isStartingRef.current = false;
+    if (isRecordingRef.current) {
+      // Currently recording - this click stops and sends it.
+      setIsRecording(false);
+      if (mediaRecorderRef.current) {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (_) { }
+      }
       return;
+    }
+
+    if (!mediaStreamRef.current) {
+      const ready = await ensureMicReady();
+      if (!ready) return;
     }
 
     setIsRecording(true);
     startRecordingClip();
-    isStartingRef.current = false;
-
-    // If the user already released before the mic finished getting ready
-    // (a fast desktop click can beat the async getUserMedia call - this
-    // race is what caused recording to get permanently stuck after the
-    // first use), honor that release right now instead of losing it.
-    if (pendingStopRef.current) {
-      pendingStopRef.current = false;
-      handleRecordEnd();
-    }
-  };
-
-  const handleRecordEnd = (e?: React.SyntheticEvent) => {
-    e?.preventDefault();
-    if (isStartingRef.current) {
-      // Release happened before recording actually started - remember to
-      // stop the instant it does, rather than silently dropping it.
-      pendingStopRef.current = true;
-      return;
-    }
-    if (!isRecordingRef.current) return;
-    setIsRecording(false);
-    if (mediaRecorderRef.current) {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch (_) { }
-    }
   };
 
   const handleResetSession = () => {
@@ -706,12 +692,12 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
   const buttonLabel = quotaReached
     ? 'Quota Exceeded'
     : isRecording
-      ? 'Recording... release to send'
+      ? 'Recording... tap to send'
       : isProcessing
         ? 'Synthesizing response…'
         : isSpeaking
           ? 'Speaking Response…'
-          : 'Hold to Talk';
+          : 'Tap to Talk';
 
   const buttonDisabled = quotaReached || isProcessing || isSpeaking;
 
@@ -847,11 +833,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
       <div className="flex flex-col items-center gap-3 my-2 w-full">
         <ShimmerButton
           id="btn-voice-hold-to-talk"
-          onMouseDown={handleRecordStart}
-          onMouseUp={handleRecordEnd}
-          onMouseLeave={handleRecordEnd}
-          onTouchStart={handleRecordStart}
-          onTouchEnd={handleRecordEnd}
+          onClick={handleTalkButtonClick}
           disabled={buttonDisabled}
           background={
             quotaReached
@@ -886,7 +868,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
           {quotaReached
             ? 'Daily session quota exhausted. Quota resets tomorrow.'
             : isRecording
-              ? 'Release the button when you\'re done speaking.'
+              ? 'Tap the button again when you\'re done speaking.'
               : isSpeaking
                 ? 'Playing audio response in selected tradition.'
                 : isProcessing
