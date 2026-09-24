@@ -19,6 +19,7 @@ import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
 import { AuthScreen } from './components/AuthScreen';
 import { supabase } from './utils/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
+import { BattleMatchScreen } from './components/BattleMatchScreen';
 import {
   TRADITIONS,
   INITIAL_PROFILE,
@@ -197,6 +198,24 @@ export default function App() {
     const key = storageKey('tamilTree');
     if (key && hasLoadedForUser === userId) localStorage.setItem(key, JSON.stringify(tamilTree));
   }, [tamilTree, userId, hasLoadedForUser]);
+
+  useEffect(() => {
+    if (!userId || hasLoadedForUser !== userId) return;
+    supabase.from('profiles').upsert({
+      id: userId,
+      name: profile.name,
+      avatar_url: profile.avatarUrl,
+      scholar_level: profile.scholarLevel,
+      role_title: profile.roleTitle,
+      total_xp: profile.totalXp,
+      streak_days: profile.streakDays,
+      daily_xp: profile.dailyXp,
+      max_daily_xp: profile.maxDailyXp,
+      language_mastery: profile.languageMastery,
+    }).then(({ error }) => {
+      if (error) console.warn('[profile sync]', error.message);
+    });
+  }, [profile, userId, hasLoadedForUser]);
 
   const currentTradition: LanguageTradition =
     TRADITIONS.find((t) => t.id === currentTraditionId) || TRADITIONS[0];
@@ -384,6 +403,19 @@ export default function App() {
             currentTraditionId={currentTraditionId}
             onBack={() => setActiveTab('home')}
             onEarnXp={handleEarnXp}
+          />
+        )}
+
+        {activeTab === 'battle' && (
+          <BattleMatchScreen
+            category={currentTradition.name}
+            onExit={async () => {
+              const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+              if (data) {
+                setProfile((prev) => ({ ...prev, totalXp: data.total_xp, streakDays: data.streak_days }));
+              }
+              setActiveTab('home');
+            }}
           />
         )}
 

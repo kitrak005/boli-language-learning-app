@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, GraduationCap, Compass, Dumbbell, User, MessageCircleQuestion, AudioLines } from 'lucide-react';
+import { Home, GraduationCap, Compass, Dumbbell, User, MessageCircleQuestion, AudioLines, Swords } from 'lucide-react';
 
 interface BottomNavBarProps {
   activeTab: string;
@@ -12,6 +12,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChan
     { id: 'learn', label: 'Learn', icon: GraduationCap },
     { id: 'explore', label: 'Explore', icon: Compass },
     { id: 'practice', label: 'Practice', icon: Dumbbell },
+    { id: 'battle', label: 'Battle', icon: Swords },
     { id: 'askguru', label: 'Guru', icon: MessageCircleQuestion },
     { id: 'voice', label: 'Vāk', icon: AudioLines },
     { id: 'profile', label: 'Profile', icon: User },
@@ -29,8 +30,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChan
             id={`tab-btn-${tab.id}`}
             onClick={() => onTabChange(tab.id)}
             className={`flex flex-col items-center justify-center transition-all duration-200 cursor-pointer ${isActive
-                ? 'bg-[#C5A059] text-[#0A0A0A] rounded-full px-3 py-1.5 shadow-md shadow-[#C5A059]/20 scale-100 font-semibold'
-                : 'text-white/50 hover:text-[#C5A059] px-2 py-1 scale-95'
+              ? 'bg-[#C5A059] text-[#0A0A0A] rounded-full px-3 py-1.5 shadow-md shadow-[#C5A059]/20 scale-100 font-semibold'
+              : 'text-white/50 hover:text-[#C5A059] px-2 py-1 scale-95'
               }`}
           >
             <IconComponent className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
