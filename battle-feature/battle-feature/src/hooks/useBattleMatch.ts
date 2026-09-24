@@ -1,0 +1,202 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../utils/supabaseClient';
+
+export interface BattleMatchRow {
+  id: string;
+  player1_id: string;
+  player2_id: string;
+  player1_score: number;
+  player2_score: number;
+  player1_streak: number;
+  player2_streak: number;
+  current_round: number;
+  total_rounds: number;
+  category: string;
+  status: 'active' | 'finished';
+  player1_xp_awarded: number | null;
+  player2_xp_awarded: number | null;
+}
+
+export interface BattleQuestionRow {
+  id: string;
+  match_id: string;
+  round: number;
+  question_tag: string;
+  instruction: string;
+  question_text: string;
+  answers: [string, string, string, string];
+  correct_index: number;
+}
+
+/**
+ * Subscribes to a battle_matches row + the current round's question, and to
+ * battle_answers inserts so we know the instant the opponent answers - all
+ * via Supabase Realtime (Postgres change events), no polling.
+ */
+export function useBattleMatch(matchId: string, currentUserId: string) {
+  const [match, setMatch] = useState<BattleMatchRow | null>(null);
+  const [question, setQuestion] = useState<BattleQuestionRow | null>(null);
+  const [opponentAnswered, setOpponentAnswered] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const opponentIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!matchId) return;
+    let cancelled = false;
+
+    async function fetchMatch() {
+      setLoading(true);
+      const { data, error: fetchErr } = await supabase
+        .from('battle_matches')
+        .select('*')
+        .eq('id', matchId)
+        .single();
+
+      if (cancelled) return;
+      if (fetchErr) {
+        setError(fetchErr.message);
+        setLoading(false);
+        return;
+      }
+
+      setMatch(data as BattleMatchRow);
+      opponentIdRef.current =
+        data.player1_id === currentUserId ? data.player2_id : data.player1_id;
+      setLoading(false);
+    }
+
+    fetchMatch();
+    return () => {
+      cancelled = true;
+    };
+  }, [matchId, currentUserId]);
+
+  useEffect(() => {
+    if (!match) return;
+    let cancelled = false;
+
+    async function fetchQuestion() {
+      const { data, error: qErr } = await supabase
+        .from('battle_match_questions')
+        .select('*')
+        .eq('match_id', matchId)
+        .eq('round', match!.current_round)
+        .single();
+
+      if (cancelled) return;
+      if (qErr) {
+        setError(qErr.message);
+        return;
+      }
+      setQuestion(data as BattleQuestionRow);
+      setOpponentAnswered(false);
+    }
+
+    fetchQuestion();
+    return () => {
+      cancelled = true;
+    };
+  }, [match?.current_round, matchId]);
+
+  useEffect(() => {
+    if (!matchId) return;
+    const channel = supabase
+      .channel(`battle_match_${matchId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'battle_matches', filter: `id=eq.${matchId}` },
+        (payload) => {
+          setMatch(payload.new as BattleMatchRow);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [matchId]);
+
+  useEffect(() => {
+    if (!match) return;
+
+    const channel = supabase
+      .channel(`battle_answers_${matchId}_${match.current_round}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'battle_answers',
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload) => {
+          const row = payload.new as { round: number; player_id: string };
+          if (row.round === match.current_round && row.player_id === opponentIdRef.current) {
+            setOpponentAnswered(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [matchId, match?.current_round]);
+
+  const submitAnswer = useCallback(
+    async (selectedIndex: number) => {
+      if (!question) return;
+      const isCorrect = selectedIndex === question.correct_index;
+
+      const { error: insertErr } = await supabase.from('battle_answers').insert({
+        match_id: matchId,
+        round: question.round,
+        player_id: currentUserId,
+        selected_index: selectedIndex,
+        is_correct: isCorrect,
+      });
+
+      if (insertErr) {
+        console.warn('[useBattleMatch] submitAnswer failed:', insertErr.message);
+      }
+    },
+    [matchId, currentUserId, question]
+  );
+
+  const advanceRound = useCallback(async () => {
+    if (!match) return;
+    const nextRound = match.current_round + 1;
+    const finished = nextRound > match.total_rounds;
+
+    await supabase
+      .from('battle_matches')
+      .update({
+        current_round: finished ? match.current_round : nextRound,
+        status: finished ? 'finished' : 'active',
+      })
+      .eq('id', matchId);
+  }, [match, matchId]);
+
+  const isPlayer1 = match?.player1_id === currentUserId;
+  const myScore = match ? (isPlayer1 ? match.player1_score : match.player2_score) : 0;
+  const myStreak = match ? (isPlayer1 ? match.player1_streak : match.player2_streak) : 0;
+  const opponentScore = match ? (isPlayer1 ? match.player2_score : match.player1_score) : 0;
+  const myXpAwarded = match ? (isPlayer1 ? match.player1_xp_awarded : match.player2_xp_awarded) : null;
+
+  return {
+    match,
+    question,
+    opponentAnswered,
+    loading,
+    error,
+    submitAnswer,
+    advanceRound,
+    myScore,
+    myStreak,
+    opponentScore,
+    myXpAwarded,
+    opponentId: opponentIdRef.current,
+  };
+}
