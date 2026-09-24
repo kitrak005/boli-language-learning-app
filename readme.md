@@ -1,8 +1,8 @@
-# Vākya (वाक्य)
+BOLVANI 
 
 **A classical language learning platform for Sanskrit, Pali, and Classical Tamil.**
 
-Vākya blends Duolingo-style gamified lessons with a dedicated AI dictionary assistant, letting learners study foundational vocabulary, grammar, and sacred texts across three classical Indian language traditions — with XP, streaks, and progressive skill trees to keep the habit going.
+BOLVANI blends Duolingo-style gamified lessons with a dedicated AI dictionary assistant, letting learners study foundational vocabulary, grammar, and sacred texts across three classical Indian language traditions — with XP, streaks, and progressive skill trees to keep the habit going.
 
 ---
 
