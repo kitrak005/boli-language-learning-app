@@ -106,7 +106,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#C5A059] to-[#8e6d34] flex items-center justify-center shadow-lg shadow-[#C5A059]/20 mb-3">
                         <BookOpen className="w-8 h-8 text-[#0A0A0A]" />
                     </div>
-                    <h1 className="font-serif text-3xl font-bold tracking-widest text-[#C5A059]">VĀKYA</h1>
+                    <h1 className="font-serif text-3xl font-bold tracking-widest text-[#C5A059]">BOLVANI</h1>
                     <p className="text-sm text-white/50 font-light mt-1">Begin Your Journey</p>
                 </div>
 
@@ -124,7 +124,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="scholar@vakya.app"
+                                    placeholder="scholar@bolvani.app"
                                     autoComplete="email"
                                     className="w-full bg-[#0F0F0F] border border-white/15 focus:border-[#C5A059] rounded-xl pl-10 pr-3 py-3 text-sm text-white placeholder:text-white/30 focus:outline-hidden transition-all"
                                 />

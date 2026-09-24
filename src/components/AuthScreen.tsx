@@ -71,9 +71,9 @@ export const AuthScreen: React.FC = () => {
                 {/* Brand header */}
                 <div className="text-center mb-6">
                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#DFC386] to-[#C5A059] mx-auto flex items-center justify-center shadow-lg shadow-[#C5A059]/20 mb-3">
-                        <span className="font-serif text-2xl font-bold text-[#0A0A0A]">V</span>
+                        <span className="font-serif text-2xl font-bold text-[#0A0A0A]">B</span>
                     </div>
-                    <h1 className="font-serif text-3xl font-bold text-[#C5A059] tracking-widest">VĀKYA</h1>
+                    <h1 className="font-serif text-3xl font-bold text-[#C5A059] tracking-widest">BOLVANI</h1>
                     <p className="text-white/50 text-sm mt-1">
                         {mode === 'login' ? 'Continue your sacred journey' : 'Join a community of scholars exploring ancient wisdom'}
                     </p>
@@ -105,7 +105,7 @@ export const AuthScreen: React.FC = () => {
                             <input
                                 type="email"
                                 placeholder="Email Address"
-                            
+
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -146,7 +146,7 @@ export const AuthScreen: React.FC = () => {
                                     type="button"
                                     className="text-xs text-[#C5A059]/70 hover:text-[#C5A059] underline cursor-pointer"
                                 >
-                                  Recover Password?
+                                    Recover Password?
                                 </button>
                             </div>
                         )}
