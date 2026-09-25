@@ -19,25 +19,57 @@ export function useMatchmaking(currentUserId: string) {
   const [matchId, setMatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const searchChannelsRef = useRef<ReturnType<typeof supabase.channel>[]>([]);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const cleanupSearchChannels = useCallback(() => {
     searchChannelsRef.current.forEach((ch) => supabase.removeChannel(ch));
     searchChannelsRef.current = [];
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
   }, []);
 
   useEffect(() => cleanupSearchChannels, [cleanupSearchChannels]);
 
-  const triggerQuestionGeneration = useCallback(async (id: string) => {
+  const triggerQuestionGeneration = useCallback(async (id: string, category = 'Sanskrit') => {
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
-    if (!token) return;
 
-    const { error: fnErr } = await supabase.functions.invoke('generate-battle-questions', {
-      body: { match_id: id },
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (fnErr) {
-      console.warn('[useMatchmaking] question generation failed:', fnErr.message);
+    try {
+      const res = await fetch('/api/generate-battle-questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ match_id: id, category, total_rounds: 5 }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.questions && !json.insertedByServer) {
+          const { error: insErr } = await supabase
+            .from('battle_match_questions')
+            .upsert(json.questions, { onConflict: 'match_id,round' });
+          if (insErr) {
+            console.warn('[useMatchmaking] Client questions upsert note:', insErr.message);
+          }
+        }
+        return;
+      }
+    } catch (e: any) {
+      console.warn('[useMatchmaking] /api/generate-battle-questions attempt failed, falling back to edge fn:', e.message);
+    }
+
+    if (token) {
+      const { error: fnErr } = await supabase.functions.invoke('generate-battle-questions', {
+        body: { match_id: id },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (fnErr) {
+        console.warn('[useMatchmaking] Edge function question generation failed:', fnErr.message);
+      }
     }
   }, []);
 
@@ -60,7 +92,7 @@ export function useMatchmaking(currentUserId: string) {
         // own question generation.
         setMatchId(data as string);
         setStatus('matched');
-        await triggerQuestionGeneration(data as string);
+        await triggerQuestionGeneration(data as string, category);
         return;
       }
 
@@ -95,6 +127,27 @@ export function useMatchmaking(currentUserId: string) {
         .subscribe();
 
       searchChannelsRef.current = [asPlayer1, asPlayer2];
+
+      // Realtime fallback: some networks (mobile data, campus wifi,
+      // corporate firewalls) block or drop the websocket connection
+      // Realtime needs. Without this, a player on such a network would
+      // stay stuck on "Finding an Opponent..." forever even after another
+      // player's find_match() call successfully paired them — the match
+      // row would exist in the database, they'd just never hear about it.
+      // Polling every 2s guarantees they find out regardless of whether
+      // the websocket ever connects.
+      pollIntervalRef.current = setInterval(async () => {
+        const { data: row } = await supabase
+          .from('battle_matches')
+          .select('id, status')
+          .or(`player1_id.eq.${currentUserId},player2_id.eq.${currentUserId}`)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (row) onMatched(row);
+      }, 2000);
     },
     [currentUserId, cleanupSearchChannels, triggerQuestionGeneration]
   );

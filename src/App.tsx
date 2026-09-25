@@ -437,6 +437,7 @@ export default function App() {
         onSelectTradition={handleSelectTradition}
         isOpen={isTraditionModalOpen}
         onClose={() => setIsTraditionModalOpen(false)}
+        profile={profile}
       />
 
       {/* Interactive Lesson Modal (Screen 4) */}

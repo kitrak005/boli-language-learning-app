@@ -99,7 +99,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, onNavig
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="scholar@vakya.app"
+                                placeholder="scholar@bolvani.app"
                                 autoComplete="email"
                                 className="w-full bg-[#0F0F0F] border border-white/15 focus:border-[#C5A059] rounded-xl px-3.5 py-3 text-sm text-white placeholder:text-white/30 focus:outline-hidden transition-all"
                             />

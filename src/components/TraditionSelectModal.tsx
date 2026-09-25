@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowRight, BookOpen, Brain, Waves, X, CheckCircle2 } from 'lucide-react';
-import { LanguageTradition, TraditionId } from '../types';
+import { LanguageTradition, TraditionId, UserProfile } from '../types';
 import { TRADITIONS } from '../data/mockData';
 import { sound } from '../utils/audio';
 
@@ -9,6 +9,14 @@ interface TraditionSelectModalProps {
   onSelectTradition: (id: TraditionId) => void;
   isOpen: boolean;
   onClose: () => void;
+  profile: UserProfile;
+}
+
+function getMasteryLevelLabel(pct: number): string {
+  if (pct >= 80) return 'ADVANCED';
+  if (pct >= 50) return 'FOUNDATION LEVEL';
+  if (pct >= 20) return 'NOVICE';
+  return 'BEGINNER';
 }
 
 export const TraditionSelectModal: React.FC<TraditionSelectModalProps> = ({
@@ -16,6 +24,7 @@ export const TraditionSelectModal: React.FC<TraditionSelectModalProps> = ({
   onSelectTradition,
   isOpen,
   onClose,
+  profile,
 }) => {
   if (!isOpen) return null;
 
@@ -63,16 +72,16 @@ export const TraditionSelectModal: React.FC<TraditionSelectModalProps> = ({
         <div className="space-y-4">
           {TRADITIONS.map((tradition) => {
             const isSelected = tradition.id === currentTraditionId;
+            const progressPercentage = profile.languageMastery[tradition.id] ?? 0;
 
             return (
               <article
                 key={tradition.id}
                 id={`tradition-card-${tradition.id}`}
-                className={`rounded-xl p-5 flex flex-col relative overflow-hidden transition-all duration-200 cursor-pointer bg-[#171717] border ${
-                  isSelected
+                className={`rounded-xl p-5 flex flex-col relative overflow-hidden transition-all duration-200 cursor-pointer bg-[#171717] border ${isSelected
                     ? 'border-[#C5A059] ring-1 ring-[#C5A059] shadow-lg shadow-[#C5A059]/10'
                     : 'border-white/10 hover:border-[#C5A059]/40'
-                }`}
+                  }`}
                 onClick={() => handleSelect(tradition)}
               >
                 {/* Subtle decorative background quarter circle */}
@@ -105,15 +114,14 @@ export const TraditionSelectModal: React.FC<TraditionSelectModalProps> = ({
                 {/* Progress bar */}
                 <div className="mb-4">
                   <div className="flex justify-between text-xs mb-1.5 text-white/60 font-medium">
-                    <span className="uppercase tracking-wider text-[10px]">{tradition.levelName}</span>
-                    <span className="text-[#C5A059] font-bold">{tradition.progressPercentage}%</span>
+                    <span className="uppercase tracking-wider text-[10px]">{getMasteryLevelLabel(progressPercentage)}</span>
+                    <span className="text-[#C5A059] font-bold">{progressPercentage}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-700 ${
-                        tradition.progressPercentage > 0 ? 'bg-[#C5A059]' : 'bg-white/20'
-                      }`}
-                      style={{ width: `${tradition.progressPercentage}%` }}
+                      className={`h-full rounded-full transition-all duration-700 ${progressPercentage > 0 ? 'bg-[#C5A059]' : 'bg-white/20'
+                        }`}
+                      style={{ width: `${progressPercentage}%` }}
                     />
                   </div>
                 </div>
