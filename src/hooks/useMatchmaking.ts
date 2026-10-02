@@ -103,9 +103,7 @@ export function useMatchmaking(currentUserId: string) {
         cleanupSearchChannels();
         setMatchId(row.id);
         setStatus('matched');
-        // The opponent's client triggers generation in this branch (they're
-        // the one whose find_match() call created the row), so we don't
-        // need to call it again — but it's idempotent if we did.
+        triggerQuestionGeneration(row.id, category);
       };
 
       const asPlayer1 = supabase
@@ -190,6 +188,7 @@ export function useMatchmaking(currentUserId: string) {
           const row = payload.new as { status: string };
           if (row.status === 'active') {
             setStatus('matched');
+            triggerQuestionGeneration(matchId);
           }
         }
       )

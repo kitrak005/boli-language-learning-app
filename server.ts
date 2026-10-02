@@ -834,6 +834,183 @@ app.post('/api/picture-quiz', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Battle Questions — generates multiple-choice quiz questions for 1v1
+// Shāstrārtha Duel matches.  Primary path: proxy to the deployed Supabase
+// Edge Function (which inserts into battle_match_questions using the
+// service-role key).  Fallback: generate locally via Gemini / hardcoded
+// bank and return them for client-side upsert.
+// ---------------------------------------------------------------------------
+
+interface BattleQuestion {
+  round: number;
+  question_tag: string;
+  instruction: string;
+  question_text: string;
+  answers: [string, string, string, string];
+  correct_index: number;
+}
+
+const BATTLE_FALLBACK_QUESTIONS: BattleQuestion[] = [
+  {
+    round: 1,
+    question_tag: 'Sandhi & Basics',
+    instruction: 'Identify the combined form',
+    question_text: 'What is the Sandhi of: "देव + आलयः" (deva + ālayaḥ)?',
+    answers: ['देवालयः', 'देवलयः', 'देवकालयः', 'देव्यालयः'],
+    correct_index: 0,
+  },
+  {
+    round: 2,
+    question_tag: 'Grammar',
+    instruction: 'Identify the grammatical case',
+    question_text: 'In "रामेण हतः", what vibhakti (case) is "रामेण"?',
+    answers: ['Dvitīyā', 'Tṛtīyā', 'Caturthī', 'Pañcamī'],
+    correct_index: 1,
+  },
+  {
+    round: 3,
+    question_tag: 'Vocabulary',
+    instruction: 'Select the correct translation',
+    question_text: 'What is the classical term for "Elephant"?',
+    answers: ['अश्वः', 'सिंहः', 'गजः', 'मर्कटः'],
+    correct_index: 2,
+  },
+  {
+    round: 4,
+    question_tag: 'Classical Literature',
+    instruction: 'Complete the saying',
+    question_text: '"विद्वान् सर्वत्र ..." complete the aphorism:',
+    answers: ['पूज्यते', 'गच्छति', 'तिष्ठति', 'जयति'],
+    correct_index: 0,
+  },
+  {
+    round: 5,
+    question_tag: 'Dhātu Root',
+    instruction: 'Identify the verb root',
+    question_text: 'What is the root (Dhātu) of "गच्छति" (gacchati)?',
+    answers: ['√चल्', '√गम्', '√स्था', '√दृश्'],
+    correct_index: 1,
+  },
+];
+
+function getBattleFallbackQuestions(
+  matchId: string,
+  category: string,
+  totalRounds: number
+): (BattleQuestion & { match_id: string })[] {
+  const tagged = BATTLE_FALLBACK_QUESTIONS.map((q) => ({
+    ...q,
+    question_tag: `${category} • ${q.question_tag}`,
+  }));
+  const result: (BattleQuestion & { match_id: string })[] = [];
+  for (let i = 0; i < totalRounds; i++) {
+    result.push({ ...tagged[i % tagged.length], round: i + 1, match_id: matchId });
+  }
+  return result;
+}
+
+async function generateBattleQuestionsViaGemini(
+  matchId: string,
+  category: string,
+  totalRounds: number
+): Promise<(BattleQuestion & { match_id: string })[]> {
+  const ai = getAIClient();
+  if (!ai) {
+    return getBattleFallbackQuestions(matchId, category, totalRounds);
+  }
+
+  const prompt = `You are generating a ${totalRounds}-round multiple-choice quiz battle for a
+Sanskrit/Pali/classical-language learning app. Topic/tradition: "${category}".
+
+Return ONLY a JSON array (no markdown fences, no commentary) with exactly ${totalRounds}
+objects, one per round, in this shape:
+{
+  "round": <1-based integer>,
+  "question_tag": "<short grammar/topic label, e.g. 'Sandhi Rules • Intermediate'>",
+  "instruction": "<short imperative, e.g. 'Translate to Sanskrit'>",
+  "question_text": "<the actual prompt/sentence/word>",
+  "answers": ["<option A>", "<option B>", "<option C>", "<option D>"],
+  "correct_index": <0-3, index into answers>
+}
+
+Vary difficulty slightly across rounds and keep each question answerable in under 10 seconds.`;
+
+  const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash'];
+  for (const modelName of modelsToTry) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+      });
+      const rawText = response.text || '[]';
+      const cleaned = rawText.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned) as BattleQuestion[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((q) => ({ ...q, match_id: matchId }));
+      }
+    } catch (err: any) {
+      console.warn(`[VAKYA] Battle questions model "${modelName}" failed:`, err.message);
+    }
+  }
+
+  console.warn('[VAKYA] All Gemini models failed for battle questions, using fallback');
+  return getBattleFallbackQuestions(matchId, category, totalRounds);
+}
+
+app.post('/api/generate-battle-questions', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'] ?? '';
+    const { match_id, category = 'Sanskrit', total_rounds = 5 } = req.body || {};
+
+    if (!match_id) {
+      return res.status(400).json({ error: 'match_id is required' });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    // Primary path: proxy to the deployed Edge Function which has the
+    // service-role key and can INSERT into battle_match_questions directly.
+    if (supabaseUrl && anonKey && authHeader) {
+      try {
+        const edgeRes = await fetch(
+          `${supabaseUrl}/functions/v1/generate-battle-questions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: authHeader,
+              apikey: anonKey,
+            },
+            body: JSON.stringify({ match_id }),
+          }
+        );
+
+        if (edgeRes.ok) {
+          const data = await edgeRes.json();
+          return res.json({ ...data, insertedByServer: true });
+        }
+
+        console.warn(
+          `[VAKYA] Edge Function returned ${edgeRes.status}, falling back to local generation`
+        );
+      } catch (edgeErr: any) {
+        console.warn('[VAKYA] Edge Function unreachable:', edgeErr.message);
+      }
+    }
+
+    // Fallback: generate questions locally and return them for client-side
+    // upsert. The client will attempt supabase.from('battle_match_questions')
+    // .upsert(...) — this works if an INSERT policy exists on that table.
+    const questions = await generateBattleQuestionsViaGemini(match_id, category, total_rounds);
+    res.json({ questions, insertedByServer: false, status: 'generated_locally' });
+  } catch (err: any) {
+    console.error('[VAKYA] /api/generate-battle-questions error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Setup Vite middleware for Development or Static for Production
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
