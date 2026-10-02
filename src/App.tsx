@@ -18,8 +18,11 @@ import { LessonModal } from './components/LessonModal';
 import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
 import { AuthScreen } from './components/AuthScreen';
 import { supabase } from './utils/supabaseClient';
-import type { Session } from '@supabase/supabase-js';
 import { BattleMatchScreen } from './components/BattleMatchScreen';
+import { RankedMatchScreen } from './components/RankedMatchScreen.tsx';
+import { LeaderboardScreen } from './components/LeaderboardScreen.tsx';
+import { seedFakePlayers } from './lib/seedData.ts';
+import { getPlayer } from './lib/repository.ts';
 import {
   TRADITIONS,
   INITIAL_PROFILE,
@@ -46,6 +49,9 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
+
+    // Seed 30 fake players for matchmaking & leaderboard
+    seedFakePlayers();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -355,9 +361,12 @@ export default function App() {
           <HomeView
             currentTradition={currentTradition}
             profile={profile}
+            userId={userId}
             onContinueLesson={handleStartActiveLesson}
             onStartReview={() => setActiveTab('practice')}
             onOpenTraditions={() => setIsTraditionModalOpen(true)}
+            onStartMatch={() => setActiveTab('battle')}
+            onOpenLeaderboard={() => setActiveTab('leaderboard')}
             onUpdateDailyGoal={(newGoal) => {
               setProfile((prev) => {
                 const nextProfile = {
@@ -407,7 +416,7 @@ export default function App() {
         )}
 
         {activeTab === 'battle' && (
-          <BattleMatchScreen
+          <RankedMatchScreen
             category={currentTradition.name}
             onExit={async () => {
               const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
@@ -416,6 +425,15 @@ export default function App() {
               }
               setActiveTab('home');
             }}
+            onLeaderboard={() => setActiveTab('leaderboard')}
+          />
+        )}
+
+        {activeTab === 'leaderboard' && (
+          <LeaderboardScreen
+            currentPlayerId={userId ?? 'local_user'}
+            currentPlayerLeagueId={getPlayer(userId ?? 'local_user')?.leagueId ?? 1}
+            onBack={() => setActiveTab('home')}
           />
         )}
 

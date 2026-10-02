@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BookOpen,
   ArrowRight,
@@ -11,12 +11,18 @@ import {
   Sparkles,
   RefreshCw,
   Info,
+  Swords,
+  Trophy,
 } from 'lucide-react';
 import { LanguageTradition, UserProfile, WordOfTheDay } from '../types';
 import { WORDS_OF_THE_DAY } from '../data/mockData';
 import { sound } from '../utils/audio';
 import { IndianTeacher } from './IndianTeacher';
 import { DailyGoalTracker } from './DailyGoalTracker';
+import { LeagueBadge } from './LeagueBadge.tsx';
+import { LeagueProgressBar } from './LeagueProgressBar.tsx';
+import { getLeague } from '../lib/leagues.ts';
+import { getPlayer, ensurePlayer, type PlayerRecord } from '../lib/repository.ts';
 
 interface HomeViewProps {
   currentTradition: LanguageTradition;
@@ -26,6 +32,9 @@ interface HomeViewProps {
   onOpenTraditions: () => void;
   onUpdateDailyGoal?: (newGoal: number) => void;
   onCelebrateGoal?: () => void;
+  onStartMatch?: () => void;
+  onOpenLeaderboard?: () => void;
+  userId?: string | null;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -36,8 +45,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenTraditions,
   onUpdateDailyGoal,
   onCelebrateGoal,
+  onStartMatch,
+  onOpenLeaderboard,
+  userId,
 }) => {
   const [wordIndex, setWordIndex] = useState(0);
+  const [playerRecord, setPlayerRecord] = useState<PlayerRecord | null>(null);
+
+  useEffect(() => {
+    const id = userId || 'local_user';
+    const player = ensurePlayer(id, profile.name || 'Scholar', profile.avatarUrl);
+    setPlayerRecord(player);
+  }, [userId, profile.name, profile.avatarUrl]);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showWordDetails, setShowWordDetails] = useState(false);
 
@@ -132,6 +151,89 @@ export const HomeView: React.FC<HomeViewProps> = ({
         onStartStudy={onContinueLesson}
         onCelebrate={onCelebrateGoal}
       />
+
+      {/* Prominent Ranked Arena League & Matchmaking Section */}
+      {playerRecord && (() => {
+        const league = getLeague(playerRecord.rating, playerRecord.leagueId);
+        return (
+          <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#18150F] via-[#121212] to-[#0A0A0A] border border-[#C5A059]/40 p-5 sm:p-7 shadow-2xl group">
+            {/* Ambient gold glow */}
+            <div
+              className="absolute -right-8 -top-8 w-48 h-48 rounded-full blur-3xl pointer-events-none opacity-40"
+              style={{ backgroundColor: league.glow }}
+            />
+
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 sm:gap-6">
+              {/* Left: Badge + League details */}
+              <div className="flex items-center gap-4 sm:gap-5 w-full md:w-auto">
+                <LeagueBadge league={league} size="lg" />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#C5A059] bg-[#C5A059]/10 px-2 py-0.5 rounded border border-[#C5A059]/30">
+                      RANKED ARENA
+                    </span>
+                    <span className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">
+                      League {league.roman}
+                    </span>
+                  </div>
+                  <h3 className="font-serif text-2xl sm:text-3xl font-normal text-white">{league.name}</h3>
+                  <div className="flex items-center gap-3 text-xs text-white/60">
+                    <span className="font-serif text-lg font-bold text-white">{playerRecord.rating}</span>
+                    <span className="text-[10px] uppercase font-mono text-[#C5A059] font-bold">ELO</span>
+                    <span className="text-white/30">•</span>
+                    <span>{playerRecord.wins}W - {playerRecord.losses}L</span>
+                    {playerRecord.winStreak > 1 && (
+                      <>
+                        <span className="text-white/30">•</span>
+                        <span className="text-amber-400 font-semibold">🔥 {playerRecord.winStreak} Streak</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Progress Bar + Action Buttons */}
+              <div className="flex flex-col sm:items-end gap-3.5 w-full md:w-auto">
+                <LeagueProgressBar
+                  rating={playerRecord.rating}
+                  league={league}
+                  className="w-full sm:w-64"
+                />
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  {onOpenLeaderboard && (
+                    <button
+                      type="button"
+                      id="btn-home-leaderboard"
+                      onClick={() => {
+                        sound.playTileClick();
+                        onOpenLeaderboard();
+                      }}
+                      className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Trophy className="w-3.5 h-3.5 text-[#C5A059]" />
+                      <span>Ranks</span>
+                    </button>
+                  )}
+                  {onStartMatch && (
+                    <button
+                      type="button"
+                      id="btn-home-find-match"
+                      onClick={() => {
+                        sound.playTileClick();
+                        onStartMatch();
+                      }}
+                      className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#AA7C11] text-[#0A0A0A] text-xs font-bold uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-lg shadow-[#C5A059]/25 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Swords className="w-4 h-4 stroke-[2.2]" />
+                      <span>Find Match</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Primary Action: Current Lesson Card */}
       <section>
