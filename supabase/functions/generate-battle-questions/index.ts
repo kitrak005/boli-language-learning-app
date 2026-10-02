@@ -5,9 +5,13 @@
 // joined via join_match_by_code()). Idempotent: if questions already
 // exist for the match, it's a no-op — safe even if both clients race.
 //
+// PRIMARY: Draws from the static_quiz_questions table (30 pre-verified
+// Sanskrit MCQs seeded by migration 006). No LLM calls at runtime.
+//
+// FALLBACK: Gemini API (only if static table is empty and GEMINI_API_KEY
+// is configured). Hardcoded bank as last resort.
+//
 // deploy:  supabase functions deploy generate-battle-questions
-// secrets: supabase secrets set GEMINI_API_KEY=...  (reuse the same key
-//          your voice-agent.ts / picture-quiz.ts already use)
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -23,6 +27,15 @@ interface GeneratedQuestion {
   question_text: string;
   answers: [string, string, string, string];
   correct_index: number;
+}
+
+interface StaticQuizRow {
+  id: string;
+  question: string;
+  options: string[];
+  correct_index: number;
+  category: string;
+  time_limit_sec: number;
 }
 
 Deno.serve(async (req) => {
@@ -71,7 +84,8 @@ Deno.serve(async (req) => {
       return json({ status: 'already_generated' });
     }
 
-    const questions = await generateQuestionsWithGemini(match.category, match.total_rounds);
+    // ── Primary path: draw from static_quiz_questions table ──────────────
+    const questions = await getStaticQuestions(adminClient, match.category, match.total_rounds);
 
     const rows = questions.map((q) => ({ match_id, ...q }));
     const { error: insertErr } = await adminClient.from('battle_match_questions').insert(rows);
@@ -82,7 +96,7 @@ Deno.serve(async (req) => {
       throw insertErr;
     }
 
-    return json({ status: 'generated', count: rows.length });
+    return json({ status: 'generated', count: rows.length, source: 'static_bank' });
   } catch (err) {
     console.error('[generate-battle-questions] error:', err);
     return json({ error: String(err) }, 500);
@@ -96,10 +110,67 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Hardcoded backup questions, used whenever Gemini is unavailable (missing
-// key, or a quota exhaustion like the 429s hit earlier) — this way a
-// GEMINI_API_KEY problem degrades a match's question quality instead of
-// breaking it outright.
+// ── Static question retrieval (primary path — no LLM calls) ─────────────────
+
+/**
+ * Draws questions from the static_quiz_questions table, shuffled randomly.
+ * Falls back to Gemini API, then to hardcoded bank, in that order.
+ */
+async function getStaticQuestions(
+  adminClient: ReturnType<typeof createClient>,
+  category: string,
+  totalRounds: number
+): Promise<GeneratedQuestion[]> {
+  try {
+    // Fetch all static questions — the table has ~30 rows, so this is cheap
+    const { data: rows, error: fetchErr } = await adminClient
+      .from('static_quiz_questions')
+      .select('*');
+
+    if (!fetchErr && rows && rows.length > 0) {
+      const staticRows = rows as StaticQuizRow[];
+
+      // Fisher-Yates shuffle
+      for (let i = staticRows.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [staticRows[i], staticRows[j]] = [staticRows[j], staticRows[i]];
+      }
+
+      // Select the requested number of rounds (wrap if needed)
+      const selected: GeneratedQuestion[] = [];
+      for (let i = 0; i < totalRounds; i++) {
+        const q = staticRows[i % staticRows.length];
+        selected.push({
+          round: i + 1,
+          question_tag: `संस्कृतम् • ${q.category}`,
+          instruction:
+            q.category === 'Vyakaran'
+              ? 'उचितं व्याकरणविकल्पं चिनुत'
+              : 'उचितं साहित्यिकविकल्पं चिनुत',
+          question_text: q.question,
+          answers: q.options as [string, string, string, string],
+          correct_index: q.correct_index,
+        });
+      }
+
+      console.log(`[generate-battle-questions] Served ${selected.length} questions from static bank`);
+      return selected;
+    }
+
+    console.warn('[generate-battle-questions] static_quiz_questions table empty or query failed, trying Gemini');
+  } catch (err) {
+    console.warn('[generate-battle-questions] Error querying static table:', err);
+  }
+
+  // Fallback: Gemini API (only if static table is unavailable)
+  return generateQuestionsWithGemini(category, totalRounds);
+}
+
+// ── Hardcoded backup questions (last resort) ────────────────────────────────
+// Used whenever both the static table AND Gemini are unavailable — this way
+// a missing table or GEMINI_API_KEY problem degrades a match's question
+// quality instead of breaking it outright.
+
 const FALLBACK_QUESTIONS: GeneratedQuestion[] = [
   {
     round: 1,
@@ -153,6 +224,8 @@ function getFallbackQuestions(category: string, totalRounds: number): GeneratedQ
   return result;
 }
 
+// ── Gemini API fallback (only used when static table is empty) ───────────────
+
 async function generateQuestionsWithGemini(
   category: string,
   totalRounds: number
@@ -160,7 +233,7 @@ async function generateQuestionsWithGemini(
   const apiKey = Deno.env.get('GEMINI_API_KEY');
 
   if (!apiKey) {
-    console.warn('[generate-battle-questions] GEMINI_API_KEY not configured, using fallback questions');
+    console.warn('[generate-battle-questions] GEMINI_API_KEY not configured, using hardcoded fallback');
     return getFallbackQuestions(category, totalRounds);
   }
 
@@ -217,6 +290,6 @@ Vary difficulty slightly across rounds and keep each question answerable in unde
     }
   }
 
-  console.warn('[generate-battle-questions] All Gemini models failed, using fallback questions');
+  console.warn('[generate-battle-questions] All Gemini models failed, using hardcoded fallback');
   return getFallbackQuestions(category, totalRounds);
 }

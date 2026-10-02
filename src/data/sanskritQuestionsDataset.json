@@ -1,0 +1,392 @@
+[
+  {
+    "id": "sk_vyk_001",
+    "question": "'रामेण' इति पदे का विभक्तिः अस्ति?",
+    "options": [
+      "प्रथमा",
+      "द्वितीया",
+      "तृतीया",
+      "चतुर्थी"
+    ],
+    "correct_index": 2,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_002",
+    "question": "'गच्छति' इति पदस्य मूलधातुः कः?",
+    "options": [
+      "गच्छ्",
+      "गम्",
+      "गच्छति",
+      "गमि"
+    ],
+    "correct_index": 1,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_003",
+    "question": "'विद्या + आलयः' अस्य सन्धिपदम् किम् भवेत्?",
+    "options": [
+      "विद्यालयः",
+      "विद्यालये",
+      "विद्यालयम्",
+      "विदालयः"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_004",
+    "question": "'पठित्वा' इति पदे कः प्रत्ययः प्रयुक्तः?",
+    "options": [
+      "तुमुन्",
+      "क्त्वा",
+      "ल्यप्",
+      "शतृ"
+    ],
+    "correct_index": 1,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_005",
+    "question": "'प्रतिदिनम्' इति पदस्य समासविग्रहः कः?",
+    "options": [
+      "दिनं दिनं प्रति",
+      "प्रति च दिनम्",
+      "दिनेन सह",
+      "दिनस्य पश्चात्"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_006",
+    "question": "'लङ् लकारः' कस्य कालस्य सूचकः अस्ति?",
+    "options": [
+      "वर्तमानकालस्य",
+      "भविष्यत्कालस्य",
+      "भूतकालस्य",
+      "आज्ञार्थस्य"
+    ],
+    "correct_index": 2,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_007",
+    "question": "'अहम् विद्यालयम् _____।' उचितक्रियापदं किम्?",
+    "options": [
+      "गच्छति",
+      "गच्छसि",
+      "गच्छामि",
+      "गच्छन्ति"
+    ],
+    "correct_index": 2,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_008",
+    "question": "'मुनि' शब्दस्य तृतीया-एकवचने किं रूपं भवति?",
+    "options": [
+      "मुनिना",
+      "मुनये",
+      "मुनेः",
+      "मुनौ"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_009",
+    "question": "'उपगम्य' इति पदे कः प्रत्ययः अस्ति?",
+    "options": [
+      "क्त्वा",
+      "तुमुन्",
+      "ल्यप्",
+      "तव्यत्"
+    ],
+    "correct_index": 2,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_010",
+    "question": "'पितरौ' इत्यस्य पदस्य समासविग्रहः कः?",
+    "options": [
+      "माता च पिता च",
+      "पिता च भ्राता च",
+      "माता च भगिनी च",
+      "पिता च पुत्रः च"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_001",
+    "question": "रामायणस्य रचयिता कः कविः अस्ति?",
+    "options": [
+      "वेदव्यासः",
+      "वाल्मीकिः",
+      "कालिदासः",
+      "भवभूतिः"
+    ],
+    "correct_index": 1,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_002",
+    "question": "महाभारतम् कस्य रचयितुः महाकाव्यम् अस्ति?",
+    "options": [
+      "वाल्मीकिः",
+      "वेदव्यासः",
+      "बाणभट्टः",
+      "भारविः"
+    ],
+    "correct_index": 1,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_003",
+    "question": "'अभिज्ञानशाकुन्तलम्' कस्य नाटककारस्य प्रसिद्धं नाटकम्?",
+    "options": [
+      "कालिदासः",
+      "माघः",
+      "श्रीहर्षः",
+      "भासः"
+    ],
+    "correct_index": 0,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_004",
+    "question": "'कादम्बरी' इति गद्यकाव्यस्य रचयिता कः?",
+    "options": [
+      "दण्डी",
+      "सुबन्धुः",
+      "बाणभट्टः",
+      "अम्बिकादत्तव्यासः"
+    ],
+    "correct_index": 2,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_005",
+    "question": "संस्कृतसाहित्ये 'आदिकविः' इति नाम्ना कः ज्ञायते?",
+    "options": [
+      "महर्षि वाल्मीकिः",
+      "महर्षि वेदव्यासः",
+      "कविकुलगुरु कालिदासः",
+      "महाकवि माघः"
+    ],
+    "correct_index": 0,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_006",
+    "question": "'पंचतन्त्रम्' इति नीतिकथाग्रन्थस्य रचयिता कः?",
+    "options": [
+      "विष्णुशर्मा",
+      "नारायणपण्डितः",
+      "चाणक्यः",
+      "भर्तृहरिः"
+    ],
+    "correct_index": 0,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_007",
+    "question": "'मेघदूतम्' कस्य प्रकारस्य काव्यम् अस्ति?",
+    "options": [
+      "महाकाव्यम्",
+      "खण्डकाव्यम् (गीतिकाव्यम्)",
+      "नाटकम्",
+      "प्रहसनम्"
+    ],
+    "correct_index": 1,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_008",
+    "question": "'गीतगोविन्दम्' इति काव्यस्य रचयिता कः?",
+    "options": [
+      "जयदेवः",
+      "विद्यापतिः",
+      "बिल्हणः",
+      "रह्मानः"
+    ],
+    "correct_index": 0,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_009",
+    "question": "'मुद्राराक्षसम्' इति प्रसिद्धस्य ऐतिहासिकनाटकस्य रचयिता कः?",
+    "options": [
+      "विशाखदत्तः",
+      "हर्षवर्धनः",
+      "शूद्रकः",
+      "भट्टनारायणः"
+    ],
+    "correct_index": 0,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_lit_010",
+    "question": "'मृच्छकटिकम्' कस्य नाटककारस्य रचना अस्ति?",
+    "options": [
+      "शूद्रकः",
+      "कालिदासः",
+      "बाणभट्टः",
+      "माघः"
+    ],
+    "correct_index": 0,
+    "category": "Literature",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_011",
+    "question": "'पावकः' इति पदस्य सन्धिविच्छेदः कः भवति?",
+    "options": [
+      "पौ + अकः",
+      "पो + अकः",
+      "पा + अकः",
+      "पाव + कः"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_012",
+    "question": "'रामेण सह सीता वनम् अगच्छत्' इत्यत्र 'रामेण' पदे केन सूत्रेण तृतीया विभक्तिः अभवत्?",
+    "options": [
+      "सहयुक्तेऽप्रधाने",
+      "साधकतमं करणम्",
+      "येनाङ्गविकारः",
+      "इत्थम्भूतलक्षणे"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_013",
+    "question": "'गन्तुम्' इति पदे कः प्रत्ययः अस्ति?",
+    "options": [
+      "तुमुन्",
+      "क्त्वा",
+      "ल्यप्",
+      "तव्यत्"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_014",
+    "question": "'पीताम्बरः' इति पदे कः समासः अस्ति?",
+    "options": [
+      "कर्मधारयः",
+      "बहुव्रीहिः",
+      "द्विगुः",
+      "तत्पुरुषः"
+    ],
+    "correct_index": 1,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_015",
+    "question": "'अस्मद्' शब्दस्य प्रथमा-विभक्तेः बहुवचने किं रूपं भवति?",
+    "options": [
+      "अहम्",
+      "आवाम्",
+      "वयम्",
+      "मया"
+    ],
+    "correct_index": 2,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_016",
+    "question": "'लभते' इति रूपं कस्य आत्मनेपद-धातोः अस्ति?",
+    "options": [
+      "लभ् (लट् लकारः, प्रथमपुरुषः, एकवचनम्)",
+      "लभ् (लोट् लकारः, मध्यमपुरुषः)",
+      "लभ् (लङ् लकारः, उत्तमपुरुषः)",
+      "लभ् (विधिलिङ्, एकवचनम्)"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_017",
+    "question": "'गुरवे नमः' इत्यत्र 'नमः' योगे का विभक्तिः भवति?",
+    "options": [
+      "द्वितीया",
+      "तृतीया",
+      "चतुर्थी",
+      "पञ्चमी"
+    ],
+    "correct_index": 2,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_018",
+    "question": "'सज्जनः' अस्य पदस्य सन्धिः कः अस्ति?",
+    "options": [
+      "सत् + जनः (श्चुत्व सन्धिः)",
+      "सज् + जनः (ष्टुत्व सन्धिः)",
+      "सः + जनः (विसर्ग सन्धिः)",
+      "सम + जनः (अनुस्वार सन्धिः)"
+    ],
+    "correct_index": 0,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_019",
+    "question": "'हसित्वा' इत्यस्य स्थाने 'सम्' उपसर्गयोगे किं रूपं भविष्यति?",
+    "options": [
+      "संहसित्वा",
+      "संहस्य",
+      "संहसितुम्",
+      "संहसितः"
+    ],
+    "correct_index": 1,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  },
+  {
+    "id": "sk_vyk_020",
+    "question": "'दश आननानि यस्य सः' इत्यस्य समस्तपदं किम्?",
+    "options": [
+      "दशमाननः",
+      "दशाननः",
+      "दशाननम्",
+      "दशाननेन"
+    ],
+    "correct_index": 1,
+    "category": "Vyakaran",
+    "time_limit_sec": 10
+  }
+]

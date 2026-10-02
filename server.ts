@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import { AccessToken } from 'livekit-server-sdk';
 import { createServer as createViteServer } from 'vite';
@@ -835,11 +836,16 @@ app.post('/api/picture-quiz', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Battle Questions — generates multiple-choice quiz questions for 1v1
-// Shāstrārtha Duel matches.  Primary path: proxy to the deployed Supabase
-// Edge Function (which inserts into battle_match_questions using the
-// service-role key).  Fallback: generate locally via Gemini / hardcoded
-// bank and return them for client-side upsert.
+// Battle Questions — serves pre-verified MCQs for 1v1 Shāstrārtha Duels.
+//
+// PRIMARY: Draws from the static 30-question Sanskrit MCQ bank loaded from
+// sanskritQuestionsDataset.json — zero LLM calls at runtime.
+//
+// SECONDARY: Proxies to the deployed Supabase Edge Function (which reads
+// from static_quiz_questions table and inserts into battle_match_questions
+// using the service-role key).
+//
+// OPT-IN LLM: Gemini generation only if USE_LIVE_LLM=true is set.
 // ---------------------------------------------------------------------------
 
 interface BattleQuestion {
@@ -851,6 +857,69 @@ interface BattleQuestion {
   correct_index: number;
 }
 
+interface RawStaticMCQ {
+  id: string;
+  question: string;
+  options: string[];
+  correct_index: number;
+  category: string;
+  time_limit_sec: number;
+}
+
+// ── Load the 30-question static Sanskrit MCQ bank at startup ────────────────
+let STATIC_MCQ_BANK: RawStaticMCQ[] = [];
+try {
+  const datasetPath = path.resolve(__dirname, 'src', 'data', 'sanskritQuestionsDataset.json');
+  const raw = readFileSync(datasetPath, 'utf-8');
+  STATIC_MCQ_BANK = JSON.parse(raw) as RawStaticMCQ[];
+  console.log(`[VAKYA] Loaded ${STATIC_MCQ_BANK.length} static Sanskrit MCQs from dataset`);
+} catch (err: any) {
+  console.warn('[VAKYA] Could not load sanskritQuestionsDataset.json:', err.message);
+}
+
+/**
+ * Fisher-Yates shuffle of a cloned array — returns a new array.
+ */
+function shuffleArray<T>(arr: T[]): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
+ * Draws `count` questions from the static MCQ bank, shuffled randomly.
+ * Maps from the raw dataset schema to the BattleQuestion shape.
+ */
+function getStaticBattleQuestions(
+  matchId: string,
+  _category: string,
+  count: number
+): (BattleQuestion & { match_id: string })[] {
+  const shuffled = shuffleArray(STATIC_MCQ_BANK);
+
+  const result: (BattleQuestion & { match_id: string })[] = [];
+  for (let i = 0; i < count; i++) {
+    const q = shuffled[i % shuffled.length];
+    result.push({
+      match_id: matchId,
+      round: i + 1,
+      question_tag: `संस्कृतम् • ${q.category}`,
+      instruction:
+        q.category === 'Vyakaran'
+          ? 'उचितं व्याकरणविकल्पं चिनुत'
+          : 'उचितं साहित्यिकविकल्पं चिनुत',
+      question_text: q.question,
+      answers: q.options as [string, string, string, string],
+      correct_index: q.correct_index,
+    });
+  }
+  return result;
+}
+
+// Hardcoded last-resort bank (only used if JSON dataset failed to load)
 const BATTLE_FALLBACK_QUESTIONS: BattleQuestion[] = [
   {
     round: 1,
@@ -970,41 +1039,57 @@ app.post('/api/generate-battle-questions', async (req, res) => {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
 
-    // Primary path: proxy to the deployed Edge Function which has the
-    // service-role key and can INSERT into battle_match_questions directly.
-    if (supabaseUrl && anonKey && authHeader) {
-      try {
-        const edgeRes = await fetch(
-          `${supabaseUrl}/functions/v1/generate-battle-questions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: authHeader,
-              apikey: anonKey,
-            },
-            body: JSON.stringify({ match_id }),
+    // ── Primary path: serve from the static 30-question bank ────────────
+    // No LLM calls, no network dependencies — instant and deterministic.
+    if (STATIC_MCQ_BANK.length > 0) {
+      // If Supabase Edge Function is reachable, let it handle the DB insert
+      // (it now also reads from static_quiz_questions table).
+      if (supabaseUrl && anonKey && authHeader) {
+        try {
+          const edgeRes = await fetch(
+            `${supabaseUrl}/functions/v1/generate-battle-questions`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: authHeader,
+                apikey: anonKey,
+              },
+              body: JSON.stringify({ match_id }),
+            }
+          );
+
+          if (edgeRes.ok) {
+            const data = await edgeRes.json();
+            return res.json({ ...data, insertedByServer: true, source: 'static_bank' });
           }
-        );
 
-        if (edgeRes.ok) {
-          const data = await edgeRes.json();
-          return res.json({ ...data, insertedByServer: true });
+          console.warn(
+            `[VAKYA] Edge Function returned ${edgeRes.status}, serving static questions locally`
+          );
+        } catch (edgeErr: any) {
+          console.warn('[VAKYA] Edge Function unreachable, serving static questions locally:', edgeErr.message);
         }
-
-        console.warn(
-          `[VAKYA] Edge Function returned ${edgeRes.status}, falling back to local generation`
-        );
-      } catch (edgeErr: any) {
-        console.warn('[VAKYA] Edge Function unreachable:', edgeErr.message);
       }
+
+      // Edge function unavailable — return static questions for client-side
+      // upsert into battle_match_questions.
+      const questions = getStaticBattleQuestions(match_id, category, total_rounds);
+      console.log(`[VAKYA] Serving ${questions.length} static MCQs for match ${match_id}`);
+      return res.json({ questions, insertedByServer: false, status: 'generated_locally', source: 'static_bank' });
     }
 
-    // Fallback: generate questions locally and return them for client-side
-    // upsert. The client will attempt supabase.from('battle_match_questions')
-    // .upsert(...) — this works if an INSERT policy exists on that table.
-    const questions = await generateBattleQuestionsViaGemini(match_id, category, total_rounds);
-    res.json({ questions, insertedByServer: false, status: 'generated_locally' });
+    // ── Opt-in LLM path: only if USE_LIVE_LLM=true is explicitly set ────
+    if (process.env.USE_LIVE_LLM === 'true') {
+      console.log('[VAKYA] USE_LIVE_LLM=true — generating questions via Gemini');
+      const questions = await generateBattleQuestionsViaGemini(match_id, category, total_rounds);
+      return res.json({ questions, insertedByServer: false, status: 'generated_locally', source: 'gemini' });
+    }
+
+    // ── Last resort: hardcoded 5-question bank ──────────────────────────
+    console.warn('[VAKYA] Static dataset not loaded and LLM disabled — using hardcoded fallback');
+    const questions = getBattleFallbackQuestions(match_id, category, total_rounds);
+    res.json({ questions, insertedByServer: false, status: 'generated_locally', source: 'hardcoded_fallback' });
   } catch (err: any) {
     console.error('[VAKYA] /api/generate-battle-questions error:', err);
     res.status(500).json({ error: err.message });
