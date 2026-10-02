@@ -10,8 +10,10 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChan
   const tabs = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'learn', label: 'Learn', icon: GraduationCap },
+    { id: 'explore', label: 'Explore', icon: Compass },
     { id: 'practice', label: 'Practice', icon: Dumbbell },
     { id: 'battle', label: 'Battle', icon: Swords },
+    { id: 'voice', label: 'Vāk', icon: AudioLines },
     { id: 'leaderboard', label: 'Ranks', icon: Trophy },
     { id: 'askguru', label: 'Guru', icon: MessageCircleQuestion },
     { id: 'profile', label: 'Profile', icon: User },

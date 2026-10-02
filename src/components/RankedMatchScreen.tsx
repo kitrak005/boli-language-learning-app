@@ -91,7 +91,14 @@ export function RankedMatchScreen({
   const botTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Supabase battle hooks (for real multiplayer when paired)
-  const { status: mmStatus, matchId, findMatch, cancelSearch } = useMatchmaking(userId ?? '');
+  const {
+    status: mmStatus,
+    matchId,
+    findMatch,
+    cancelSearch,
+    updateSearchWindow,
+    onlineCount,
+  } = useMatchmaking(userId ?? '');
   const battle = useBattleMatch(matchId ?? '', userId ?? '');
   const { profile: myProfile } = useProfile(userId);
   const { profile: opponentProfile, winRatePct: opponentWinRate } = useProfile(battle.opponentId);
@@ -111,17 +118,23 @@ export function RankedMatchScreen({
   useEffect(() => {
     if (mmStatus === 'matched' && battle.match && phase === 'searching') {
       stopSearch();
+
+      const rawOppRating =
+        (opponentProfile as any)?.elo_rating ??
+        (opponentProfile ? 800 + ((opponentProfile.wins || 0) * 25) - ((opponentProfile.losses || 0) * 15) : (myPlayer?.rating ?? 800));
+      const oppRating = Math.max(0, Math.round(rawOppRating));
+
       setOpponent({
         record: {
           id: battle.opponentId ?? 'online_opponent',
           name: opponentProfile?.name ?? 'Opponent',
-          rating: 1000,
-          peakRating: 1000,
-          matchesPlayed: 10,
-          wins: 5,
-          losses: 5,
-          winStreak: 1,
-          leagueId: 2,
+          rating: oppRating,
+          peakRating: Math.max(oppRating, (opponentProfile as any)?.peak_rating ?? oppRating),
+          matchesPlayed: (opponentProfile?.wins || 0) + (opponentProfile?.losses || 0),
+          wins: opponentProfile?.wins || 0,
+          losses: opponentProfile?.losses || 0,
+          winStreak: (opponentProfile as any)?.win_streak || 0,
+          leagueId: getLeague(oppRating).id,
           updatedAt: new Date().toISOString(),
           isBot: false,
           avatarUrl: opponentProfile?.avatar_url ?? undefined,
@@ -130,7 +143,7 @@ export function RankedMatchScreen({
       });
       setPhase('vs_intro');
     }
-  }, [mmStatus, battle.match, phase, opponentProfile, battle.opponentId]);
+  }, [mmStatus, battle.match, phase, opponentProfile, battle.opponentId, myPlayer?.rating]);
 
   // Online battle completion
   useEffect(() => {
@@ -162,9 +175,10 @@ export function RankedMatchScreen({
     setSearchElapsed(0);
     searchStartRef.current = Date.now();
 
-    // Trigger online matchmaking search
+    // Trigger online matchmaking search with rating and window
+    const initialRating = myPlayer?.rating ?? 800;
     try {
-      findMatch(category);
+      findMatch(category, initialRating, 100);
     } catch {
       // Offline safe
     }
@@ -176,6 +190,7 @@ export function RankedMatchScreen({
 
       if (myPlayer) {
         const window = computeSearchWindow(elapsed);
+        updateSearchWindow(window);
 
         // Check local opponents (for testing or fast pairing)
         const localOpp = findOpponentInWindow(myPlayer.id, myPlayer.rating, window);
@@ -201,7 +216,7 @@ export function RankedMatchScreen({
         }
       }
     }, 1000);
-  }, [myPlayer, findMatch, cancelSearch, category]);
+  }, [myPlayer, findMatch, cancelSearch, category, updateSearchWindow]);
 
   const stopSearch = useCallback(() => {
     if (searchTimerRef.current) {
@@ -308,6 +323,20 @@ export function RankedMatchScreen({
       winnerId: outcome === 'win' ? myPlayer.id : outcome === 'loss' ? oppRecord.id : null,
       createdAt: new Date().toISOString(),
     });
+
+    // Sync to Supabase profiles table if authenticated
+    if (userId && !userId.startsWith('guest_')) {
+      supabase.from('profiles').update({
+        elo_rating: updatedPlayer.rating,
+        peak_rating: updatedPlayer.peakRating,
+        win_streak: updatedPlayer.winStreak,
+        league_id: updatedPlayer.leagueId,
+        wins: updatedPlayer.wins,
+        losses: updatedPlayer.losses,
+      }).eq('id', userId).then(({ error }) => {
+        if (error) console.warn('[RankedMatchScreen] Supabase ELO sync note:', error.message);
+      });
+    }
 
     setMatchOutcome(outcome);
     setRatingDelta(update.deltaA);
@@ -494,12 +523,21 @@ export function RankedMatchScreen({
           .orbiting-ring { animation: orbit-cw 20s linear infinite; }
         `}</style>
 
-        {/* Searching Status Pill */}
-        <div className="inline-flex items-center gap-2 bg-[#161616] border border-[#C5A059]/40 px-4 py-1.5 rounded-full shadow-inner">
-          <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-ping" />
-          <span className="text-[11px] font-bold tracking-widest text-[#C5A059] uppercase">
-            Searching for Opponent
-          </span>
+        {/* Searching Status & Live Online Scholars Pill */}
+        <div className="flex items-center gap-2.5">
+          <div className="inline-flex items-center gap-2 bg-[#161616] border border-emerald-500/30 px-3.5 py-1.5 rounded-full shadow-inner">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-bold tracking-wider text-emerald-400 uppercase">
+              {onlineCount} {onlineCount === 1 ? 'Scholar' : 'Scholars'} Online
+            </span>
+          </div>
+
+          <div className="inline-flex items-center gap-2 bg-[#161616] border border-[#C5A059]/40 px-3.5 py-1.5 rounded-full shadow-inner">
+            <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-ping" />
+            <span className="text-[11px] font-bold tracking-widest text-[#C5A059] uppercase">
+              In Queue
+            </span>
+          </div>
         </div>
 
         {/* Radar with Badge */}
@@ -514,7 +552,12 @@ export function RankedMatchScreen({
         <div className="text-center space-y-1.5">
           <h2 className="font-serif text-2xl text-white font-normal">Rating Matchmaker</h2>
           <p className="text-xs text-[#C5A059] font-mono tracking-wide">
-            Searching {myPlayer.rating} ± {windowVal}
+            Searching {myPlayer.rating} ± {windowVal} ({Math.max(0, myPlayer.rating - windowVal)} – {myPlayer.rating + windowVal})
+          </p>
+          <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold">
+            {onlineCount > 1
+              ? 'Multiplayer Active • Pairing Closest Rating'
+              : 'Expanding Search Window (+50 Every 5s)'}
           </p>
         </div>
 

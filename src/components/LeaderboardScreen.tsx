@@ -2,9 +2,10 @@
  * Leaderboard screen with podium top-3, ranked list, and league tabs.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ArrowLeft, Trophy, Crown, Medal, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getTopPlayers, listPlayersByLeague, type PlayerRecord } from '../lib/repository.ts';
+import { supabase } from '../utils/supabaseClient.ts';
+import { getTopPlayers, listPlayersByLeague, savePlayer, type PlayerRecord } from '../lib/repository.ts';
 import { getLeague, LEAGUES } from '../lib/leagues.ts';
 import { LeagueBadge } from './LeagueBadge.tsx';
 
@@ -27,21 +28,62 @@ export function LeaderboardScreen({
 }: LeaderboardScreenProps) {
   const [activeTab, setActiveTab] = useState<TabId>('global');
   const [page, setPage] = useState(0);
+  const [remotePlayers, setRemotePlayers] = useState<PlayerRecord[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('*')
+      .limit(100)
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          const mapped: PlayerRecord[] = data.map((p: any) => {
+            const rating =
+              p.elo_rating ?? Math.max(800, 800 + (p.wins || 0) * 25 - (p.losses || 0) * 15);
+            return {
+              id: p.id,
+              name: p.name || 'Scholar',
+              avatarUrl: p.avatar_url || undefined,
+              rating,
+              peakRating: p.peak_rating ?? rating,
+              matchesPlayed: (p.wins || 0) + (p.losses || 0),
+              wins: p.wins || 0,
+              losses: p.losses || 0,
+              winStreak: p.win_streak || 0,
+              leagueId: p.league_id || getLeague(rating).id,
+              updatedAt: p.updated_at || new Date().toISOString(),
+              isBot: false,
+            };
+          });
+          setRemotePlayers(mapped);
+          mapped.forEach((pl) => savePlayer(pl));
+        }
+      });
+  }, []);
 
   const hasFriends = friends && friends.length > 0;
 
   const allPlayers = useMemo(() => {
+    // Combine local and remote players, deduplicated by id
+    const local = getTopPlayers(200);
+    const idMap = new Map<string, PlayerRecord>();
+    local.forEach((p) => idMap.set(p.id, p));
+    remotePlayers.forEach((p) => idMap.set(p.id, p));
+    const merged = Array.from(idMap.values());
+
     if (activeTab === 'global') {
-      return getTopPlayers(200);
+      return merged.sort((a, b) => b.rating - a.rating);
     }
     if (activeTab === 'league') {
-      return listPlayersByLeague(currentPlayerLeagueId).sort((a, b) => b.rating - a.rating);
+      return merged
+        .filter((p) => p.leagueId === currentPlayerLeagueId)
+        .sort((a, b) => b.rating - a.rating);
     }
     if (activeTab === 'friends' && hasFriends) {
       return [...friends].sort((a, b) => b.rating - a.rating);
     }
-    return getTopPlayers(200);
-  }, [activeTab, currentPlayerLeagueId, friends, hasFriends]);
+    return merged.sort((a, b) => b.rating - a.rating);
+  }, [activeTab, currentPlayerLeagueId, friends, hasFriends, remotePlayers]);
 
   const totalPages = Math.max(1, Math.ceil(allPlayers.length / PAGE_SIZE));
   const pageStart = page * PAGE_SIZE;
