@@ -133,6 +133,7 @@ export function BattleMatchScreen({
     }
     return (
       <BattleGameScreen
+        key={`${battle.match.id}_${battle.match.current_round}`}
         currentPlayer={{ name: myProfile?.name ?? 'You', score: battle.myScore, avatarUrl: myProfile?.avatar_url ?? undefined }}
         opponent={{ name: opponentProfile?.name ?? 'Opponent', score: battle.opponentScore, avatarUrl: opponentProfile?.avatar_url ?? undefined }}
         round={battle.match.current_round}

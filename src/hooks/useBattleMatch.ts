@@ -147,24 +147,78 @@ export function useBattleMatch(matchId: string, currentUserId: string) {
 
   useEffect(() => {
     if (!matchId) return;
+    let cancelled = false;
+
+    // Realtime websocket subscription
     const channel = supabase
       .channel(`battle_match_${matchId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'battle_matches', filter: `id=eq.${matchId}` },
         (payload) => {
-          setMatch(payload.new as BattleMatchRow);
+          if (!cancelled) setMatch(payload.new as BattleMatchRow);
         }
       )
       .subscribe();
 
+    // 1-second polling fallback to guarantee 100% sync even if WebSockets are slow or blocked
+    const pollInterval = setInterval(async () => {
+      const { data } = await supabase
+        .from('battle_matches')
+        .select('*')
+        .eq('id', matchId)
+        .maybeSingle();
+
+      if (data && !cancelled) {
+        setMatch((prev) => {
+          if (!prev) return data as BattleMatchRow;
+          if (
+            data.current_round !== prev.current_round ||
+            data.player1_score !== prev.player1_score ||
+            data.player2_score !== prev.player2_score ||
+            data.player1_streak !== prev.player1_streak ||
+            data.player2_streak !== prev.player2_streak ||
+            data.status !== prev.status
+          ) {
+            return data as BattleMatchRow;
+          }
+          return prev;
+        });
+      }
+    }, 1000);
+
     return () => {
+      cancelled = true;
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, [matchId]);
 
   useEffect(() => {
     if (!match) return;
+    let cancelled = false;
+
+    // Reset opponent answered state for the current round
+    setOpponentAnswered(false);
+
+    // Initial check: did opponent already answer this round?
+    const checkOpponentAnswer = async () => {
+      const oppId = opponentIdRef.current;
+      if (!oppId) return;
+      const { data } = await supabase
+        .from('battle_answers')
+        .select('id')
+        .eq('match_id', matchId)
+        .eq('round', match.current_round)
+        .eq('player_id', oppId)
+        .maybeSingle();
+
+      if (data && !cancelled) {
+        setOpponentAnswered(true);
+      }
+    };
+    checkOpponentAnswer();
+    const ansPoll = setInterval(checkOpponentAnswer, 1000);
 
     const channel = supabase
       .channel(`battle_answers_${matchId}_${match.current_round}`)
@@ -186,6 +240,8 @@ export function useBattleMatch(matchId: string, currentUserId: string) {
       .subscribe();
 
     return () => {
+      cancelled = true;
+      clearInterval(ansPoll);
       supabase.removeChannel(channel);
     };
   }, [matchId, match?.current_round]);

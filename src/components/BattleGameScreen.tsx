@@ -64,7 +64,7 @@ export function BattleGameScreen({
     setSelectedIndex(null);
     setTimeLeft(duration);
     timeUpFiredRef.current = false;
-  }, [questionKey, duration]);
+  }, [questionKey, round, duration]);
 
   // Countdown timer continues until 0, then calls onTimeUp
   useEffect(() => {
