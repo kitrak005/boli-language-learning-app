@@ -215,13 +215,28 @@ export function useBattleMatch(matchId: string, currentUserId: string) {
     const nextRound = match.current_round + 1;
     const finished = nextRound > match.total_rounds;
 
-    await supabase
+    // Optimistically update local state so UI transitions immediately
+    setMatch((prev) =>
+      prev
+        ? {
+            ...prev,
+            current_round: finished ? prev.current_round : nextRound,
+            status: finished ? 'finished' : 'active',
+          }
+        : null
+    );
+
+    const { error: updErr } = await supabase
       .from('battle_matches')
       .update({
         current_round: finished ? match.current_round : nextRound,
         status: finished ? 'finished' : 'active',
       })
       .eq('id', matchId);
+
+    if (updErr) {
+      console.warn('[useBattleMatch] advanceRound update error:', updErr.message);
+    }
   }, [match, matchId]);
 
   const isPlayer1 = match?.player1_id === currentUserId;

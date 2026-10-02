@@ -66,8 +66,8 @@ export function BattleGameScreen({
     timeUpFiredRef.current = false;
   }, [questionKey, duration]);
 
+  // Countdown timer continues until 0, then calls onTimeUp
   useEffect(() => {
-    if (selectedIndex !== null) return;
     if (timeLeft <= 0) {
       if (!timeUpFiredRef.current) {
         timeUpFiredRef.current = true;
@@ -77,7 +77,20 @@ export function BattleGameScreen({
     }
     const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [timeLeft, selectedIndex, onTimeUp]);
+  }, [timeLeft, onTimeUp]);
+
+  // When both players have answered, advance after 1.2s to show feedback
+  useEffect(() => {
+    if (selectedIndex !== null && opponentAnswered) {
+      const t = setTimeout(() => {
+        if (!timeUpFiredRef.current) {
+          timeUpFiredRef.current = true;
+          onTimeUp();
+        }
+      }, 1200);
+      return () => clearTimeout(t);
+    }
+  }, [selectedIndex, opponentAnswered, onTimeUp]);
 
   const locked = selectedIndex !== null;
 
