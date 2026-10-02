@@ -108,11 +108,25 @@ export function RankedMatchScreen({
     supabase.auth.getUser().then(({ data }) => {
       const uid = data.user?.id ?? `guest_${Date.now()}`;
       setUserId(uid);
-      const name = data.user?.user_metadata?.name || data.user?.email?.split('@')[0] || 'Scholar';
+      const name =
+        data.user?.user_metadata?.name ||
+        data.user?.user_metadata?.full_name ||
+        data.user?.email?.split('@')[0] ||
+        'Scholar';
       const player = ensurePlayer(uid, name, data.user?.user_metadata?.avatar_url);
       setMyPlayer(player);
     });
   }, []);
+
+  // Keep myPlayer name and avatar in sync as soon as Supabase profile loads
+  useEffect(() => {
+    if (myProfile?.name && myPlayer && myPlayer.name !== myProfile.name) {
+      setMyPlayer((prev) => (prev ? { ...prev, name: myProfile.name, avatarUrl: myProfile.avatar_url ?? prev.avatarUrl } : prev));
+      if (userId) {
+        ensurePlayer(userId, myProfile.name, myProfile.avatar_url ?? undefined);
+      }
+    }
+  }, [myProfile?.name, myProfile?.avatar_url, userId]);
 
   // Sync Supabase online matchmaking status
   useEffect(() => {
@@ -189,21 +203,18 @@ export function RankedMatchScreen({
       setSearchElapsed(elapsed);
 
       if (myPlayer) {
-        const window = computeSearchWindow(elapsed);
+        // Enforce SAME LEVEL matchmaking: restrict window within the player's league
+        const currentLeagueConfig = getLeague(myPlayer.rating, myPlayer.leagueId);
+        const rawWindow = computeSearchWindow(elapsed);
+        const maxAllowedWindow = Math.min(
+          rawWindow,
+          Math.max(50, myPlayer.rating - currentLeagueConfig.minRating),
+          Math.max(50, currentLeagueConfig.maxRating - myPlayer.rating)
+        );
+        const window = Math.max(50, maxAllowedWindow);
         updateSearchWindow(window);
 
-        // Check local opponents (for testing or fast pairing)
-        const localOpp = findOpponentInWindow(myPlayer.id, myPlayer.rating, window);
-        if (localOpp && !localOpp.isBot) {
-          stopSearch();
-          cancelSearch();
-          setOpponent({ record: localOpp, isBot: false });
-          setupLocalQuiz();
-          setPhase('vs_intro');
-          return;
-        }
-
-        // Bot fallback after 30 seconds
+        // Bot fallback after 30 seconds of searching for real online peers
         if (shouldUseBotFallback(elapsed)) {
           const bot = findBotOpponent(myPlayer.id, myPlayer.rating);
           if (bot) {

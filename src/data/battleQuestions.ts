@@ -138,9 +138,34 @@ export const QUESTION_BANK: Record<string, BattleQuestionItem[]> = {
   ],
 };
 
+const ROTATION_STORAGE_PREFIX = 'boli_seen_questions_';
+
+function getSeenQuestionIds(category: string): Set<string> {
+  try {
+    if (typeof localStorage === 'undefined') return new Set();
+    const raw = localStorage.getItem(`${ROTATION_STORAGE_PREFIX}${category}`);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenQuestionIds(category: string, seen: Set<string>): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(
+      `${ROTATION_STORAGE_PREFIX}${category}`,
+      JSON.stringify(Array.from(seen))
+    );
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 /**
- * Returns a randomized subset of pre-verified questions for the given category.
- * Shuffles questions so consecutive matches have varied gameplay.
+ * Returns a rotated subset of pre-verified questions for the given category.
+ * Rotates questions so consecutive matches have varied gameplay and questions
+ * are not repeated until the entire question bank has been cycled through.
  */
 export function getQuestionsForCategory(category: string, count = 5): BattleQuestionItem[] {
   let list = QUESTION_BANK[category];
@@ -148,14 +173,29 @@ export function getQuestionsForCategory(category: string, count = 5): BattleQues
     list = QUESTION_BANK['Sanskrit'];
   }
 
-  // Fisher-Yates shuffle a clone of the list
-  const shuffled = [...list];
+  const seen = getSeenQuestionIds(category);
+  // Pick from questions not yet played in the current rotation cycle
+  let unplayed = list.filter((q) => !seen.has(q.id));
+
+  // If unplayed questions are fewer than needed, reset the cycle
+  if (unplayed.length < count) {
+    seen.clear();
+    unplayed = [...list];
+  }
+
+  // Fisher-Yates shuffle the unplayed questions
+  const shuffled = [...unplayed];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
 
   const selected = shuffled.slice(0, count);
+
+  // Mark selected questions as seen
+  selected.forEach((q) => seen.add(q.id));
+  saveSeenQuestionIds(category, seen);
+
   return selected.map((q, idx) => ({
     ...q,
     round: idx + 1,

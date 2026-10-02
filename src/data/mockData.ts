@@ -40,7 +40,7 @@ export const TRADITIONS: LanguageTradition[] = [
 ];
 
 export const INITIAL_PROFILE: UserProfile = {
-  name: 'Ananda M.',
+  name: 'Scholar',
   scholarLevel: 'SCHOLAR LEVEL',
   roleTitle: 'Novice Scribe',
   avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBLrH8Elz2mqY6dXtArekdpYXztbyNOblniZhIMx2X_EsanRotXyGWKndqom2k3S32qegVH_51PaLZt2KqhJMEszqSLhiutVPoFbzRLmLWgET7lhZWcZmkpfFRohO4ELb_zK94-NhYdc5mtzkhxdOuy04XA9Pgvf8GiGU39O1EKkR3FP6imNDJSLQ-n16Y89RolR5R3BB1kp85c_-1KaLonHRr9_vFdP-yJeNprpPh5lMzifCjFHCxbJA',

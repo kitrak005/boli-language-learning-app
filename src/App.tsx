@@ -18,6 +18,7 @@ import { LessonModal } from './components/LessonModal';
 import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
 import { AuthScreen } from './components/AuthScreen';
 import { supabase } from './utils/supabaseClient';
+import type { Session } from '@supabase/supabase-js';
 import { BattleMatchScreen } from './components/BattleMatchScreen';
 import { RankedMatchScreen } from './components/RankedMatchScreen.tsx';
 import { LeaderboardScreen } from './components/LeaderboardScreen.tsx';

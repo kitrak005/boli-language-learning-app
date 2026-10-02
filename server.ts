@@ -889,34 +889,36 @@ function shuffleArray<T>(arr: T[]): T[] {
   return shuffled;
 }
 
+// In-memory rotation queue so consecutive matches rotate through the 30-question bank
+let serverQuestionPool: RawStaticMCQ[] = [];
+
 /**
- * Draws `count` questions from the static MCQ bank, shuffled randomly.
- * Maps from the raw dataset schema to the BattleQuestion shape.
+ * Draws `count` questions from the static MCQ bank, rotating across matches
+ * so consecutive matches never repeat questions until all 30 have been seen.
  */
-function getStaticBattleQuestions(
+function getRotatedStaticBattleQuestions(
   matchId: string,
   _category: string,
   count: number
 ): (BattleQuestion & { match_id: string })[] {
-  const shuffled = shuffleArray(STATIC_MCQ_BANK);
-
-  const result: (BattleQuestion & { match_id: string })[] = [];
-  for (let i = 0; i < count; i++) {
-    const q = shuffled[i % shuffled.length];
-    result.push({
-      match_id: matchId,
-      round: i + 1,
-      question_tag: `संस्कृतम् • ${q.category}`,
-      instruction:
-        q.category === 'Vyakaran'
-          ? 'उचितं व्याकरणविकल्पं चिनुत'
-          : 'उचितं साहित्यिकविकल्पं चिनुत',
-      question_text: q.question,
-      answers: q.options as [string, string, string, string],
-      correct_index: q.correct_index,
-    });
+  if (serverQuestionPool.length < count) {
+    serverQuestionPool = shuffleArray(STATIC_MCQ_BANK);
   }
-  return result;
+
+  const selected = serverQuestionPool.splice(0, count);
+
+  return selected.map((q, idx) => ({
+    match_id: matchId,
+    round: idx + 1,
+    question_tag: `संस्कृतम् • ${q.category}`,
+    instruction:
+      q.category === 'Vyakaran'
+        ? 'उचितं व्याकरणविकल्पं चिनुत'
+        : 'उचितं साहित्यिकविकल्पं चिनुत',
+    question_text: q.question,
+    answers: q.options as [string, string, string, string],
+    correct_index: q.correct_index,
+  }));
 }
 
 // Hardcoded last-resort bank (only used if JSON dataset failed to load)
@@ -1039,43 +1041,34 @@ app.post('/api/generate-battle-questions', async (req, res) => {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
 
-    // ── Primary path: serve from the static 30-question bank ────────────
-    // No LLM calls, no network dependencies — instant and deterministic.
+    // ── Primary path: serve rotated questions from the static 30-question bank ──
+    // No live LLM calls, zero repetition across consecutive matches.
     if (STATIC_MCQ_BANK.length > 0) {
-      // If Supabase Edge Function is reachable, let it handle the DB insert
-      // (it now also reads from static_quiz_questions table).
+      const questions = getRotatedStaticBattleQuestions(match_id, category, total_rounds);
+      console.log(`[VAKYA] Serving ${questions.length} rotated static MCQs for match ${match_id}`);
+
+      // If Supabase credentials & JWT are present, try direct DB upsert
       if (supabaseUrl && anonKey && authHeader) {
         try {
-          const edgeRes = await fetch(
-            `${supabaseUrl}/functions/v1/generate-battle-questions`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: authHeader,
-                apikey: anonKey,
-              },
-              body: JSON.stringify({ match_id }),
-            }
-          );
-
-          if (edgeRes.ok) {
-            const data = await edgeRes.json();
-            return res.json({ ...data, insertedByServer: true, source: 'static_bank' });
+          const insertRes = await fetch(`${supabaseUrl}/rest/v1/battle_match_questions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: authHeader,
+              apikey: anonKey,
+              Prefer: 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(questions),
+          });
+          if (insertRes.ok) {
+            return res.json({ questions, insertedByServer: true, status: 'inserted_into_db', source: 'static_bank' });
           }
-
-          console.warn(
-            `[VAKYA] Edge Function returned ${edgeRes.status}, serving static questions locally`
-          );
-        } catch (edgeErr: any) {
-          console.warn('[VAKYA] Edge Function unreachable, serving static questions locally:', edgeErr.message);
+        } catch (dbErr: any) {
+          console.warn('[VAKYA] Direct DB insert note:', dbErr.message);
         }
       }
 
-      // Edge function unavailable — return static questions for client-side
-      // upsert into battle_match_questions.
-      const questions = getStaticBattleQuestions(match_id, category, total_rounds);
-      console.log(`[VAKYA] Serving ${questions.length} static MCQs for match ${match_id}`);
+      // Return questions for client-side upsert into battle_match_questions
       return res.json({ questions, insertedByServer: false, status: 'generated_locally', source: 'static_bank' });
     }
 

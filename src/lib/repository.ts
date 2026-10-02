@@ -119,9 +119,10 @@ export function ensurePlayer(id: string, name: string, avatarUrl?: string): Play
   let player = getPlayer(id);
   if (!player) {
     const defaults = createDefaultRating();
+    const cleanName = (name && name !== 'Ananda M.') ? name : 'Scholar';
     player = {
       id,
-      name,
+      name: cleanName,
       avatarUrl,
       rating: defaults.rating,
       peakRating: defaults.peakRating,
@@ -133,6 +134,21 @@ export function ensurePlayer(id: string, name: string, avatarUrl?: string): Play
       updatedAt: new Date().toISOString(),
     };
     savePlayer(player);
+  } else {
+    // If the stored player has the old placeholder name 'Ananda M.' or if a newer valid name is passed
+    const cleanName = (name && name !== 'Ananda M.') ? name : '';
+    let changed = false;
+    if (player.name === 'Ananda M.' || (cleanName && cleanName !== 'Scholar' && player.name !== cleanName)) {
+      player.name = cleanName || 'Scholar';
+      changed = true;
+    }
+    if (avatarUrl && player.avatarUrl !== avatarUrl) {
+      player.avatarUrl = avatarUrl;
+      changed = true;
+    }
+    if (changed) {
+      savePlayer(player);
+    }
   }
   return player;
 }

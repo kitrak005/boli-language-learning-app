@@ -171,6 +171,8 @@ async function getStaticQuestions(
 // a missing table or GEMINI_API_KEY problem degrades a match's question
 // quality instead of breaking it outright.
 
+import STATIC_DATASET from './sanskritQuestionsDataset.json' with { type: 'json' };
+
 const FALLBACK_QUESTIONS: GeneratedQuestion[] = [
   {
     round: 1,
@@ -215,8 +217,35 @@ const FALLBACK_QUESTIONS: GeneratedQuestion[] = [
 ];
 
 function getFallbackQuestions(category: string, totalRounds: number): GeneratedQuestion[] {
+  const bank = Array.isArray(STATIC_DATASET) && STATIC_DATASET.length > 0
+    ? (STATIC_DATASET as StaticQuizRow[])
+    : [];
+
+  if (bank.length > 0) {
+    const shuffled = [...bank];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const result: GeneratedQuestion[] = [];
+    for (let i = 0; i < totalRounds; i++) {
+      const q = shuffled[i % shuffled.length];
+      result.push({
+        round: i + 1,
+        question_tag: `${category} • ${q.category}`,
+        instruction:
+          q.category === 'Vyakaran'
+            ? 'उचितं व्याकरणविकल्पं चिनुत'
+            : 'उचितं साहित्यिकविकल्पं चिनुत',
+        question_text: q.question,
+        answers: q.options as [string, string, string, string],
+        correct_index: q.correct_index,
+      });
+    }
+    return result;
+  }
+
   const tagged = FALLBACK_QUESTIONS.map((q) => ({ ...q, question_tag: `${category} • ${q.question_tag}` }));
-  // Repeat the bank if a match needs more rounds than we have fallbacks for.
   const result: GeneratedQuestion[] = [];
   for (let i = 0; i < totalRounds; i++) {
     result.push({ ...tagged[i % tagged.length], round: i + 1 });

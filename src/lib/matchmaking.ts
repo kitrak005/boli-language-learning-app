@@ -4,6 +4,7 @@
  */
 
 import { listPlayers, getRecentOpponents, type PlayerRecord } from './repository.ts';
+import { getLeague } from './leagues.ts';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,8 @@ export interface MatchmakingState {
 
 /**
  * Finds the best opponent within the given rating window.
- * Prefers closest-rated; breaks ties by who has been waiting longer (lower updatedAt = older).
+ * STRICTLY enforces that opponents are at the same level (same league tier).
+ * Prefers closest-rated; breaks ties by who has been waiting longer.
  * Blocks rematching the same opponent more than MAX_CONSECUTIVE_REMATCHES times in a row.
  */
 export function findOpponentInWindow(
@@ -41,6 +43,7 @@ export function findOpponentInWindow(
 ): PlayerRecord | null {
   const allPlayers = listPlayers();
   const recentOpponents = getRecentOpponents(playerId, MAX_CONSECUTIVE_REMATCHES);
+  const playerLeague = getLeague(playerRating);
 
   // Check if the last N opponents are all the same person
   const blockedOpponentId =
@@ -52,6 +55,9 @@ export function findOpponentInWindow(
   const candidates = allPlayers.filter((p) => {
     if (p.id === playerId) return false;
     if (p.id === blockedOpponentId) return false;
+    // Same level check: opponent must be in the same league
+    const oppLeague = getLeague(p.rating, p.leagueId);
+    if (oppLeague.id !== playerLeague.id) return false;
     const diff = Math.abs(p.rating - playerRating);
     return diff <= window;
   });
@@ -70,30 +76,32 @@ export function findOpponentInWindow(
 }
 
 /**
- * Picks a bot opponent within ±100 of the player's rating.
- * If none found, picks the closest bot available.
+ * Picks a bot opponent at the EXACT SAME level (same league tier).
+ * Prefers closest rating within the league.
  */
 export function findBotOpponent(
   playerId: string,
   playerRating: number
 ): PlayerRecord | null {
   const allPlayers = listPlayers();
-  const bots = allPlayers.filter(
-    (p) => p.id !== playerId && (p.isBot || p.id.startsWith('bot_'))
+  const playerLeague = getLeague(playerRating);
+
+  // Filter bots strictly in the same league/level
+  const sameLevelBots = allPlayers.filter(
+    (p) =>
+      p.id !== playerId &&
+      (p.isBot || p.id.startsWith('bot_')) &&
+      getLeague(p.rating, p.leagueId).id === playerLeague.id
   );
 
-  if (bots.length === 0) return null;
+  const pool = sameLevelBots.length > 0
+    ? sameLevelBots
+    : allPlayers.filter((p) => p.id !== playerId && (p.isBot || p.id.startsWith('bot_')));
 
-  // Prefer bots within ±100
-  const nearby = bots.filter((b) => Math.abs(b.rating - playerRating) <= 100);
-  if (nearby.length > 0) {
-    nearby.sort((a, b) => Math.abs(a.rating - playerRating) - Math.abs(b.rating - playerRating));
-    return nearby[0];
-  }
+  if (pool.length === 0) return null;
 
-  // Fall back to closest bot
-  bots.sort((a, b) => Math.abs(a.rating - playerRating) - Math.abs(b.rating - playerRating));
-  return bots[0];
+  pool.sort((a, b) => Math.abs(a.rating - playerRating) - Math.abs(b.rating - playerRating));
+  return pool[0];
 }
 
 /**
