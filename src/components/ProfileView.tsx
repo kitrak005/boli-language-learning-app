@@ -5,6 +5,7 @@ import { WeeklyXpD3Chart } from './WeeklyXpD3Chart';
 import { useFriends } from '../hooks/useFriends';
 import { FriendsSection } from './FriendsSection';
 import { InviteFriendsModal } from './InviteFriendsModal';
+import { MonthlyBadgesCard } from './MonthlyBadgesCard';
 
 interface ProfileViewProps {
   profile: UserProfile;
@@ -191,6 +192,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, currentUserId
             ))}
           </div>
         </section>
+
+        {/* Monthly Badges */}
+        <MonthlyBadgesCard currentUserId={currentUserId ?? null} />
 
         {/* Learning Preferences */}
         <section className="space-y-3 pt-2">

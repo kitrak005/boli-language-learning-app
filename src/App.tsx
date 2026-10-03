@@ -16,6 +16,7 @@ import { VoiceModeView } from './components/VoiceModeView';
 import { TraditionSelectModal } from './components/TraditionSelectModal';
 import { LessonModal } from './components/LessonModal';
 import { LevelUpCelebrationModal } from './components/LevelUpCelebrationModal';
+import { BadgeUnlockedModal } from './components/BadgeUnlockedModal';
 import { AuthScreen } from './components/AuthScreen';
 import { supabase } from './utils/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
@@ -476,6 +477,9 @@ export default function App() {
         profile={profile}
         traditionName={currentTradition.name}
       />
+
+      {/* Monthly Badge Unlocked Celebration Modal */}
+      <BadgeUnlockedModal currentUserId={userId} />
     </div>
   );
 }
