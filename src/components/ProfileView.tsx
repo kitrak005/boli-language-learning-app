@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { Star, Flame, Sparkles, Award, Settings, Check, Volume2 } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Star, Flame, Sparkles, Award, Settings, Check, Volume2, Gift } from 'lucide-react';
 import { UserProfile } from '../types';
 import { WeeklyXpD3Chart } from './WeeklyXpD3Chart';
+import { useFriends } from '../hooks/useFriends';
 import { FriendsSection } from './FriendsSection';
+import { InviteFriendsModal } from './InviteFriendsModal';
 
 interface ProfileViewProps {
   profile: UserProfile;
@@ -12,6 +14,15 @@ interface ProfileViewProps {
 export const ProfileView: React.FC<ProfileViewProps> = ({ profile, currentUserId }) => {
   const [showTransliteration, setShowTransliteration] = useState(true);
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(true);
+
+  const { following, followers, follow, unfollow, searchProfiles } = useFriends(currentUserId ?? null);
+  const [friendsTab, setFriendsTab] = useState<'following' | 'followers'>('following');
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const friendsSectionRef = useRef<HTMLDivElement>(null);
+  const scrollToFriends = (tab: 'following' | 'followers') => {
+    setFriendsTab(tab);
+    friendsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="max-w-4xl mx-auto pb-12 animate-in fade-in duration-300">
@@ -27,7 +38,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, currentUserId
                 backgroundImage: `url('${profile.avatarUrl}')`,
               }}
             />
-            <div className="flex flex-col">
+            <div className="flex flex-col flex-1">
               <span className="text-[10px] font-bold text-[#C5A059] uppercase tracking-[0.2em]">
                 {profile.scholarLevel}
               </span>
@@ -35,6 +46,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, currentUserId
                 {profile.name}
               </h2>
               <span className="text-xs text-white/60 font-light">{profile.roleTitle}</span>
+              <div className="flex items-center gap-4 mt-2 text-xs">
+                <button onClick={() => scrollToFriends('following')} className="text-white/60 hover:text-[#C5A059] transition-colors">
+                  <span className="font-bold text-white">{following.length}</span> Following
+                </button>
+                <button onClick={() => scrollToFriends('followers')} className="text-white/60 hover:text-[#C5A059] transition-colors">
+                  <span className="font-bold text-white">{followers.length}</span> Followers
+                </button>
+                <button
+                  onClick={() => setInviteModalOpen(true)}
+                  className="ml-auto flex items-center gap-1 text-[#C5A059] hover:text-[#DFC386] transition-colors font-semibold"
+                >
+                  <Gift className="w-3.5 h-3.5" /> Invite Friends
+                </button>
+              </div>
             </div>
           </div>
 
@@ -70,7 +95,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, currentUserId
         />
 
         {/* Friends */}
-        <FriendsSection currentUserId={currentUserId ?? null} />
+        <div ref={friendsSectionRef}>
+          <FriendsSection
+            following={following}
+            followers={followers}
+            activeTab={friendsTab}
+            onTabChange={setFriendsTab}
+            onFollow={follow}
+            onUnfollow={unfollow}
+            onSearch={searchProfiles}
+            currentUserId={currentUserId ?? null}
+          />
+        </div>
 
         {/* Language Mastery */}
         <section className="space-y-4">
@@ -190,6 +226,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, currentUserId
           </div>
         </section>
       </div>
+
+      <InviteFriendsModal
+        isOpen={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        currentUserId={currentUserId ?? null}
+      />
     </div>
   );
 };
