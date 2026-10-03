@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Star, Flame, Sparkles, Award, Settings, Check, Volume2 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { WeeklyXpD3Chart } from './WeeklyXpD3Chart';
+import { FriendsSection } from './FriendsSection';
 
 interface ProfileViewProps {
   profile: UserProfile;
+  currentUserId?: string | null;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ profile }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ profile, currentUserId }) => {
   const [showTransliteration, setShowTransliteration] = useState(true);
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(true);
 
@@ -66,6 +68,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile }) => {
           maxDailyXp={profile.maxDailyXp}
           streakDays={profile.streakDays}
         />
+
+        {/* Friends */}
+        <FriendsSection currentUserId={currentUserId ?? null} />
 
         {/* Language Mastery */}
         <section className="space-y-4">

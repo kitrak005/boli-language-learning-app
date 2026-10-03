@@ -438,7 +438,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'profile' && <ProfileView profile={profile} />}
+        {activeTab === 'profile' && <ProfileView profile={profile} currentUserId={userId} />}
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
