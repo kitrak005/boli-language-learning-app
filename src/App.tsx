@@ -83,6 +83,8 @@ export default function App() {
     }
   };
 
+  const SKILL_TREE_VERSION = 3; // v3 = 5-level trees (15 nodes per language, new node IDs)
+
   const [currentTraditionId, setCurrentTraditionId] = useState<TraditionId>('sanskrit');
   const [isTraditionModalOpen, setIsTraditionModalOpen] = useState(false);
   const [activeLessonNode, setActiveLessonNode] = useState<SkillNode | null>(null);
@@ -144,6 +146,13 @@ export default function App() {
   useEffect(() => {
     if (!userId || hasLoadedForUser === userId) return;
 
+    // Clean legacy global flat keys if any exist
+    try {
+      localStorage.removeItem('vakya_sanskritTree');
+      localStorage.removeItem('vakya_paliTree');
+      localStorage.removeItem('vakya_tamilTree');
+    } catch {}
+
     const savedProfile = loadSaved<UserProfile | null>(storageKey('profile'), null);
 
     if (savedProfile) {
@@ -171,9 +180,30 @@ export default function App() {
     }
 
     setCurrentTraditionId(loadSaved(storageKey('currentTraditionId'), 'sanskrit' as TraditionId));
-    setSanskritTree(loadSaved(storageKey('sanskritTree'), SANSKRIT_SKILL_TREE));
-    setPaliTree(loadSaved(storageKey('paliTree'), PALI_SKILL_TREE));
-    setTamilTree(loadSaved(storageKey('tamilTree'), TAMIL_SKILL_TREE));
+
+    // Check version of stored trees. If older or missing, reset to fresh 5-level trees.
+    const versionKey = storageKey('treeVersion');
+    const savedVersion = versionKey ? localStorage.getItem(versionKey) : null;
+    const isUpToDate = savedVersion === String(SKILL_TREE_VERSION);
+
+    if (!isUpToDate) {
+      const sKey = storageKey('sanskritTree');
+      const pKey = storageKey('paliTree');
+      const tKey = storageKey('tamilTree');
+      if (sKey) localStorage.removeItem(sKey);
+      if (pKey) localStorage.removeItem(pKey);
+      if (tKey) localStorage.removeItem(tKey);
+      if (versionKey) localStorage.setItem(versionKey, String(SKILL_TREE_VERSION));
+
+      setSanskritTree(SANSKRIT_SKILL_TREE);
+      setPaliTree(PALI_SKILL_TREE);
+      setTamilTree(TAMIL_SKILL_TREE);
+    } else {
+      setSanskritTree(loadSaved(storageKey('sanskritTree'), SANSKRIT_SKILL_TREE));
+      setPaliTree(loadSaved(storageKey('paliTree'), PALI_SKILL_TREE));
+      setTamilTree(loadSaved(storageKey('tamilTree'), TAMIL_SKILL_TREE));
+    }
+
     setHasLoadedForUser(userId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -206,6 +236,11 @@ export default function App() {
     const key = storageKey('tamilTree');
     if (key && hasLoadedForUser === userId) localStorage.setItem(key, JSON.stringify(tamilTree));
   }, [tamilTree, userId, hasLoadedForUser]);
+
+  useEffect(() => {
+    const key = storageKey('treeVersion');
+    if (key && hasLoadedForUser === userId) localStorage.setItem(key, String(SKILL_TREE_VERSION));
+  }, [userId, hasLoadedForUser]);
 
   useEffect(() => {
     if (!userId || hasLoadedForUser !== userId) return;
@@ -258,13 +293,19 @@ export default function App() {
       const nextDaily = Math.min(prev.maxDailyXp, prev.dailyXp + xpEarned);
       justAchievedGoal = nextDaily >= prev.maxDailyXp && prev.dailyXp < prev.maxDailyXp;
 
+      const currentTree = getActiveTree();
+      const currentCompleted = currentTree.filter((n) => n.status === 'completed').length;
+      const isNewlyCompleted = activeLessonNode?.status !== 'completed';
+      const newCompletedCount = currentCompleted + (isNewlyCompleted ? 1 : 0);
+      const masteryPct = Math.min(100, Math.round((newCompletedCount / Math.max(1, currentTree.length)) * 100));
+
       return {
         ...prev,
         totalXp: prev.totalXp + xpEarned,
         dailyXp: nextDaily,
         languageMastery: {
           ...prev.languageMastery,
-          [currentTraditionId]: Math.min(100, (prev.languageMastery[currentTraditionId] || 0) + 5),
+          [currentTraditionId]: masteryPct,
         },
       };
     });
@@ -275,18 +316,18 @@ export default function App() {
       }, 600);
     }
 
-    // Unlock next node in tree — previously this ONLY ran for Sanskrit
-    // (`if (currentTraditionId === 'sanskrit')`), so completing a lesson in
-    // Pali or Tamil updated XP correctly but never unlocked the next node,
-    // leaving those trees permanently stuck after the first lesson. This now
-    // applies the same unlock logic to whichever tree is currently active.
+    // Unlock next node in tree by array order
     const advanceTree = (prev: SkillNode[]): SkillNode[] => {
       const next = [...prev];
-      const activeIdx = next.findIndex((n) => n.status === 'active');
-      if (activeIdx >= 0) {
-        next[activeIdx] = { ...next[activeIdx], status: 'completed' };
-        if (activeIdx + 1 < next.length) {
-          next[activeIdx + 1] = { ...next[activeIdx + 1], status: 'active', iconType: 'play' };
+      const targetId = activeLessonNode?.id;
+      const targetIdx = targetId
+        ? next.findIndex((n) => n.id === targetId)
+        : next.findIndex((n) => n.status === 'active');
+
+      if (targetIdx >= 0) {
+        next[targetIdx] = { ...next[targetIdx], status: 'completed', progressPercentage: 100 };
+        if (targetIdx + 1 < next.length && next[targetIdx + 1].status === 'locked') {
+          next[targetIdx + 1] = { ...next[targetIdx + 1], status: 'active', iconType: 'play' };
         }
       }
       return next;

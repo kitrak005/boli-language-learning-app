@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useMonthlyBadges } from '../hooks/useMonthlyBadges';
+import type { BadgeTheme } from '../hooks/useMonthlyBadges';
 
 interface MonthlyBadgesCardProps {
   currentUserId: string | null;
+  onPreviewChest?: (theme: BadgeTheme) => void;
 }
 
 function formatYearMonth(yearMonth: string) {
@@ -9,17 +12,55 @@ function formatYearMonth(yearMonth: string) {
   return new Date(year, month - 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
-export function MonthlyBadgesCard({ currentUserId }: MonthlyBadgesCardProps) {
+export function MonthlyBadgesCard({ currentUserId, onPreviewChest }: MonthlyBadgesCardProps) {
   const { currentTheme, progress, history, loading } = useMonthlyBadges(currentUserId);
+  const [previewing, setPreviewing] = useState(false);
 
-  if (loading || !currentTheme) return null;
+  // Show a skeleton shimmer while loading
+  if (loading) {
+    return (
+      <section className="space-y-4">
+        <h3 className="font-serif text-xl font-normal text-white">Monthly Badges</h3>
+        <div className="bg-[#121212] rounded-2xl border border-white/10 p-5 animate-pulse">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-white/10 shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3 bg-white/10 rounded-full w-3/4" />
+              <div className="h-2 bg-white/10 rounded-full w-1/2" />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Should never be null after the hook fix, but guard anyway
+  if (!currentTheme) return null;
 
   const isEarnedThisMonth = history.some((h) => h.year_month === new Date().toISOString().slice(0, 7));
   const pct = Math.min(100, Math.round((progress / currentTheme.threshold) * 100));
 
+  const handlePreview = () => {
+    if (previewing) return;
+    setPreviewing(true);
+    onPreviewChest?.(currentTheme);
+    setTimeout(() => setPreviewing(false), 3000);
+  };
+
   return (
     <section className="space-y-4">
-      <h3 className="font-serif text-xl font-normal text-white">Monthly Badges</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-serif text-xl font-normal text-white">Monthly Badges</h3>
+        {/* Preview button — lets user test the chest animation any time */}
+        <button
+          onClick={handlePreview}
+          disabled={previewing}
+          title="Preview the badge chest animation"
+          className="text-[10px] uppercase tracking-widest text-[#C5A059]/60 hover:text-[#C5A059] transition-colors disabled:opacity-40"
+        >
+          {previewing ? 'Opening…' : '🎁 Preview'}
+        </button>
+      </div>
 
       <div className="bg-[#121212] rounded-2xl border border-white/10 p-5 space-y-5">
         {/* Current month progress */}

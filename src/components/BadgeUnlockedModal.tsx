@@ -5,6 +5,8 @@ import type { BadgeTheme } from '../hooks/useMonthlyBadges';
 
 interface BadgeUnlockedModalProps {
   currentUserId: string | null;
+  /** Pass a theme here to open the chest immediately (e.g. for preview). */
+  forceTheme?: BadgeTheme | null;
 }
 
 type ChestState = 'closed' | 'shaking' | 'open';
@@ -14,8 +16,11 @@ type ChestState = 'closed' | 'shaking' | 'open';
  * a tappable reward-chest celebration the moment it happens. The XP bonus
  * itself is already applied server-side by the trigger in
  * 009_monthly_badges.sql — this is purely the player-facing reveal of it.
+ *
+ * Also supports a forceTheme prop for previewing the animation without
+ * requiring a real database badge unlock event.
  */
-export function BadgeUnlockedModal({ currentUserId }: BadgeUnlockedModalProps) {
+export function BadgeUnlockedModal({ currentUserId, forceTheme }: BadgeUnlockedModalProps) {
   const [unlockedTheme, setUnlockedTheme] = useState<BadgeTheme | null>(null);
   const [chestState, setChestState] = useState<ChestState>('closed');
   const shakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,6 +53,14 @@ export function BadgeUnlockedModal({ currentUserId }: BadgeUnlockedModalProps) {
       if (shakeTimeoutRef.current) clearTimeout(shakeTimeoutRef.current);
     };
   }, [currentUserId]);
+
+  // Preview mode: show the chest whenever forceTheme is set from outside
+  useEffect(() => {
+    if (forceTheme) {
+      setUnlockedTheme(forceTheme);
+      setChestState('closed');
+    }
+  }, [forceTheme]);
 
   const handleChestClick = () => {
     if (chestState !== 'closed') return;

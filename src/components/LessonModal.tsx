@@ -69,6 +69,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
   const handlePlaceWord = (word: WordTile) => {
     if (feedbackStatus !== 'idle') return;
     if (placedWords.length >= currentExercise.correctSequence.length) return;
+    if (placedWords.some((p) => p.word.id === word.id)) return;
 
     sound.unlockAudio();
     sound.playTileClick();
@@ -93,20 +94,21 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
   const handleCheck = () => {
     if (placedWords.length === 0 || feedbackStatus !== 'idle') return;
 
-    // Compare by the actual word content (script), not the exact wordBank
-    // object id. When a word repeats in a sentence (e.g. "X and X"),
-    // wordBank often has two separate entries with different ids so both
-    // copies can be placed independently — but since both tiles look and
-    // sound identical to the learner, checking raw ids positionally would
-    // unfairly fail a visually-correct answer just because the "wrong"
-    // (but identical-looking) instance was used in a given slot.
+    // Check matching by tile IDs against correctSequence
+    const isIdMatch =
+      placedWords.length === currentExercise.correctSequence.length &&
+      placedWords.every((p, idx) => p.word.id === currentExercise.correctSequence[idx]);
+
+    // Fallback: compare by script text in case duplicate tiles (-dup, -dup2) were placed in alternative order
     const wordBankById = new Map(currentExercise.wordBank.map((w) => [w.id, w]));
     const correctScripts = currentExercise.correctSequence.map((id) => wordBankById.get(id)?.script);
     const placedScripts = placedWords.map((p) => p.word.script);
 
-    const isCorrect =
+    const isScriptMatch =
       placedScripts.length === correctScripts.length &&
       placedScripts.every((script, idx) => script === correctScripts[idx]);
+
+    const isCorrect = isIdMatch || isScriptMatch;
 
     if (isCorrect) {
       sound.playSuccessChime();
@@ -251,20 +253,17 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
             }).map((_, idx) => (
               <div
                 key={`empty-slot-${idx}`}
-                className={`h-16 w-24 sm:w-28 border-b-2 flex items-center justify-center transition-colors ${idx === 0 ? 'border-[#C5A059]' : 'border-white/20'
+                className={`h-14 sm:h-16 w-16 sm:w-24 border-b-2 flex items-center justify-center transition-colors ${idx === 0 ? 'border-[#C5A059]' : 'border-white/20'
                   }`}
               />
             ))}
           </div>
 
-          {/* Word Bank Tiles — shuffled per exercise. Tiles stay clickable even
-              after being placed, so the same word can be used more than once
-              when the target sentence repeats it (e.g. "X and X"). A small
-              badge shows how many times a tile is currently placed, and tiles
-              only disable once all slots for this exercise are filled. */}
-          <div className="w-full flex flex-wrap items-center justify-center gap-2.5 sm:gap-4">
+          {/* Word Bank Tiles — shuffled per exercise. Duplicate words have unique IDs (-dup, -dup2)
+              so each tile can only be placed once into a slot. */}
+          <div className="w-full flex flex-wrap items-center justify-center gap-2 sm:gap-3 max-w-xl mx-auto px-1">
             {shuffledWordBank.map((word) => {
-              const usageCount = placedWords.filter((p) => p.word.id === word.id).length;
+              const isTilePlaced = placedWords.some((p) => p.word.id === word.id);
               const allSlotsFilled = placedWords.length >= currentExercise.correctSequence.length;
 
               return (
@@ -272,23 +271,18 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
                   key={word.id}
                   id={`word-bank-${word.id}`}
                   onClick={() => handlePlaceWord(word)}
-                  disabled={allSlotsFilled}
-                  className={`relative h-[68px] sm:h-[72px] px-5 sm:px-8 rounded-xl flex flex-col items-center justify-center transition-all ${allSlotsFilled
+                  disabled={allSlotsFilled || isTilePlaced}
+                  className={`relative min-h-[58px] sm:min-h-[66px] px-3.5 sm:px-6 py-1.5 sm:py-2 rounded-xl flex flex-col items-center justify-center transition-all ${isTilePlaced
                     ? 'bg-white/[0.02] text-white/20 opacity-30 cursor-not-allowed border border-white/5'
-                    : usageCount > 0
-                      ? 'bg-[#1A1A1A] border border-[#C5A059]/50 text-white hover:border-[#C5A059] active:scale-95 cursor-pointer group shadow-lg'
+                    : allSlotsFilled
+                      ? 'bg-white/[0.03] text-white/30 opacity-40 cursor-not-allowed border border-white/10'
                       : 'bg-[#161616] border border-white/15 text-white hover:border-[#C5A059] hover:bg-[#1E1E1E] active:scale-95 cursor-pointer group shadow-lg'
                     }`}
                 >
-                  {usageCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#C5A059] text-[#0A0A0A] text-[10px] font-bold flex items-center justify-center shadow-md">
-                      {usageCount}
-                    </span>
-                  )}
-                  <span className="text-xl sm:text-[26px] leading-tight text-white group-hover:text-[#C5A059] font-serif transition-colors">
+                  <span className="text-lg sm:text-2xl leading-tight text-white group-hover:text-[#C5A059] font-serif transition-colors">
                     {word.script}
                   </span>
-                  <span className="text-[11px] sm:text-xs text-white/50 group-hover:text-white/70 font-mono">{word.transliteration}</span>
+                  <span className="text-[10px] sm:text-xs text-white/50 group-hover:text-white/70 font-mono">{word.transliteration}</span>
                 </button>
               );
             })}
