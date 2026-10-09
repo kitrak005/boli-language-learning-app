@@ -350,7 +350,7 @@ Do not deviate from this layout for valid word queries.`;
         // temporarily overloaded or unavailable. gemini-3-pro-preview is EXPIRED
         // (retired March 9, 2026) — do not use it. gemini-3.7-flash is current as
         // of August 2026; gemini-3.6-flash is the prior stable GA fallback.
-        const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash'];
+        const modelsToTry = ['gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.7-flash'];
         let textOutput = '';
         let lastError: any = null;
 
@@ -441,10 +441,15 @@ app.post('/api/voice-agent', async (req, res) => {
   try {
     const {
       message,
+      audioBase64,
+      audioMimeType,
       language = 'sanskrit',
       conversationHistory = [],
       sessionTokensUsed = 0,
     } = req.body || {};
+
+    const hasAudio = typeof audioBase64 === 'string' && audioBase64.length > 0;
+    const hasText = typeof message === 'string' && message.trim().length > 0;
 
     // Token barrier per session
     if (sessionTokensUsed >= MAX_SESSION_TOKENS) {
@@ -458,11 +463,11 @@ app.post('/api/voice-agent', async (req, res) => {
       });
     }
 
-    if (!message || typeof message !== 'string' || !message.trim()) {
-      return res.status(400).json({ error: 'Please provide a message or spoken query.' });
+    if (!hasAudio && !hasText) {
+      return res.status(400).json({ error: 'Please provide a message or an audio recording.' });
     }
 
-    const trimmedMessage = message.trim();
+    const trimmedMessage = hasText ? message.trim() : '';
     const ai = getAIClient();
 
     // Derive explicit language instruction for the Guru's spoken response
@@ -484,6 +489,8 @@ app.post('/api/voice-agent', async (req, res) => {
     const VOICE_GURU_SYSTEM_PROMPT = `You are Guru Vidyadhar, a wise, compassionate master of Indian classical philosophy, Sanskrit, Classical Tamil, Pali, and Vedic wisdom in the VĀKYA sanctuary.
 You are speaking with a seeker in a real-time voice conversation.
 
+${hasAudio ? `The student's message is provided as an AUDIO recording. First, transcribe exactly what the student said in "transcript" (in whatever language/script they actually spoke — do not translate it in the transcript field, just write down what you heard). If the audio is silent or unintelligible, set transcript to "(unclear speech)".` : ''}
+
 ${languageRule}
 
 Key Persona & Voice Guidelines:
@@ -495,8 +502,9 @@ Key Persona & Voice Guidelines:
 4. If the Seeker asks a question in a different script/language than the chosen tradition, still answer the question — but write your "spokenResponse" in the selected tradition's language.
 
 Output Format:
-Return ONLY valid JSON. No markdown, no extra text, no code fences:
-{
+Return ONLY valid JSON matching this exact structure:
+{${hasAudio ? `
+  "transcript": "exactly what the student said, transcribed from the audio",` : ''}
   "verse": "Short sacred mantra or verse in original Devanagari or Tamil script (leave empty string if not applicable)",
   "verseTranslation": "English translation of the verse above",
   "spokenResponse": "Your response to the Seeker written in ${langLabel} — this is what will be spoken aloud",
@@ -505,10 +513,13 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
 }`;
 
     // Approximate token cost estimation
-    const estimatedPromptTokens = Math.ceil((trimmedMessage.length + 300) / 4);
+    const estimatedPromptTokens = Math.ceil(((trimmedMessage.length || 200) + 300) / 4);
 
     if (ai) {
-      const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash'];
+      const modelsToTry = (process.env.GEMINI_MODELS || 'gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash')
+        .split(',')
+        .map((m: string) => m.trim())
+        .filter(Boolean);
       let voiceData: any = null;
       let lastVoiceError: any = null;
 
@@ -517,18 +528,46 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
         .map((h: any) => `${h.sender === 'user' ? 'Seeker' : 'Guru'}: ${h.text}`)
         .join('\n');
 
-      const userPrompt = `${historyFormatted ? `Recent dialogue:\n${historyFormatted}\n\n` : ''}Seeker says: "${trimmedMessage}"`;
+      const normalizedAudioMime = typeof audioMimeType === 'string'
+        ? audioMimeType.split(';')[0].trim()
+        : '';
+
+      // Build multimodal payload for audio, or plain text for typed messages
+      const contentsPayload: any = hasAudio
+        ? [
+            {
+              text: `${VOICE_GURU_SYSTEM_PROMPT}\n\n${historyFormatted ? `Recent dialogue:\n${historyFormatted}\n\n` : ''}The student's audio message is attached below. First transcribe the speech, then formulate your response.`,
+            },
+            {
+              inlineData: {
+                mimeType: normalizedAudioMime || 'audio/webm',
+                data: audioBase64,
+              },
+            },
+          ]
+        : `${VOICE_GURU_SYSTEM_PROMPT}\n\n${historyFormatted ? `Recent dialogue:\n${historyFormatted}\n\n` : ''}Seeker says: "${trimmedMessage}"`;
 
       for (const modelName of modelsToTry) {
         try {
           const response = await ai.models.generateContent({
             model: modelName,
-            contents: `${VOICE_GURU_SYSTEM_PROMPT}\n\n${userPrompt}`,
+            contents: contentsPayload,
+            config: { responseMimeType: 'application/json' },
           });
 
           const rawText = response.text || '';
-          const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-          voiceData = JSON.parse(cleaned);
+          const cleaned = rawText.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+          try {
+            voiceData = JSON.parse(cleaned);
+          } catch {
+            const start = cleaned.indexOf('{');
+            const end = cleaned.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+              voiceData = JSON.parse(cleaned.slice(start, end + 1));
+            } else {
+              throw new Error('Failed to parse model JSON');
+            }
+          }
           lastVoiceError = null;
           break;
         } catch (attemptError: any) {
@@ -538,11 +577,13 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
       }
 
       if (voiceData) {
+        const transcript = hasAudio ? (voiceData.transcript || '') : trimmedMessage;
         const spoken = voiceData.spokenResponse || `तव प्रश्नः श्रुतः। ज्ञानस्य ज्योतिः सदा प्रकाशते।`;
         const estResponseTokens = Math.ceil((spoken.length + (voiceData.spokenResponseTranslation?.length || 0)) / 3);
         const totalUsed = estimatedPromptTokens + estResponseTokens;
 
         return res.json({
+          transcript,
           verse: voiceData.verse || 'ॐ शान्तिः शान्तिः शान्तिः',
           verseTranslation: voiceData.verseTranslation || 'May there be peace in all realms.',
           spokenResponse: spoken,
@@ -559,19 +600,22 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
       {
         verse: 'विद्या ददाति विनयं विनयाद्याति पात्रताम् ।',
         verseTranslation: 'True knowledge bestows humility, from humility comes worthiness.',
-        spokenResponse: `I sense deep reflection in your voice regarding "${trimmedMessage}". In our classical tradition, inquiry itself is the flame that dissolves darkness.`,
+        spokenResponse: `I sense deep reflection in your inquiry regarding "${trimmedMessage || 'your practice'}". In our classical tradition, inquiry itself is the flame that dissolves darkness.`,
+        spokenResponseTranslation: `I sense deep reflection in your inquiry. In our classical tradition, inquiry itself is the flame that dissolves darkness.`,
         topic: 'Classical Philosophy',
       },
       {
         verse: 'सत्यमेव जयते नानृतम् ।',
         verseTranslation: 'Truth alone triumphs, not falsehood.',
-        spokenResponse: `Your words touch upon the eternal quest for wisdom. Keep your awareness attuned to inner silence as you contemplate "${trimmedMessage}".`,
+        spokenResponse: `Your words touch upon the eternal quest for wisdom. Keep your awareness attuned to inner silence as you contemplate "${trimmedMessage || 'the path'}".`,
+        spokenResponseTranslation: `Your words touch upon the eternal quest for wisdom. Keep your awareness attuned to inner silence as you contemplate the path.`,
         topic: 'Wisdom & Conduct',
       },
       {
         verse: 'மனத்துக்கண் மாசிலன் ஆதல் அனைத்தறன் ஆகுல நீர பிற.',
         verseTranslation: 'Purity in mind and heart is the essence of all virtue.',
-        spokenResponse: `In the Tamil Sangam wisdom, clarity of mind is the greatest sanctuary. Reflect upon "${trimmedMessage}" with peace and dedication.`,
+        spokenResponse: `In the Tamil Sangam wisdom, clarity of mind is the greatest sanctuary. Reflect upon "${trimmedMessage || 'virtue'}" with peace and dedication.`,
+        spokenResponseTranslation: `In the Tamil Sangam wisdom, clarity of mind is the greatest sanctuary. Reflect upon virtue with peace and dedication.`,
         topic: 'Sangam Ethics',
       },
     ];
@@ -579,7 +623,12 @@ Return ONLY valid JSON. No markdown, no extra text, no code fences:
     const randomChoice = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
     const fallbackTokens = estimatedPromptTokens + 45;
     return res.json({
-      ...randomChoice,
+      transcript: hasAudio ? (trimmedMessage || '(Voice inquiry received)') : trimmedMessage,
+      verse: randomChoice.verse,
+      verseTranslation: randomChoice.verseTranslation,
+      spokenResponse: randomChoice.spokenResponse,
+      spokenResponseTranslation: randomChoice.spokenResponseTranslation,
+      topic: randomChoice.topic,
       tokensUsed: fallbackTokens,
       quotaExceeded: (sessionTokensUsed + fallbackTokens) >= MAX_SESSION_TOKENS,
     });

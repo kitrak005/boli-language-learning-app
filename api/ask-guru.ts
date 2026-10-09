@@ -335,7 +335,7 @@ Do not deviate from this layout for valid word queries.`;
                 const languageInstruction = buildLanguageInstruction(language);
                 const userPrompt = `Define and explain: "${trimmedQuery}". ${languageInstruction}`;
 
-                const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash'];
+                const modelsToTry = ['gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.7-flash'];
                 let textOutput = '';
                 let lastError: any = null;
 

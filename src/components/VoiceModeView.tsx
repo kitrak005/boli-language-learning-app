@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic,
   Volume2,
@@ -373,6 +373,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         });
 
         const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || `Server error ${res.status}`);
         setLiveUserSpeech('');
 
         if (data.quotaExceeded) {
@@ -525,10 +526,13 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         recordStartAtRef.current = null;
         const blob = new Blob(recordedChunksRef.current, { type: mimeType || 'audio/webm' });
         recordedChunksRef.current = [];
-        if (blob.size > 500 && heldMs >= MIN_RECORDING_MS) {
+        if (blob.size > 100 && heldMs >= 200) {
           handleAudioQuery(blob);
         } else {
           setLiveUserSpeech('');
+          if (heldMs > 0 && heldMs < 200) {
+            setVoiceError('Recording was very short. Tap to speak, then tap again when finished.');
+          }
         }
       };
 
@@ -629,6 +633,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
         }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Server error ${res.status}`);
 
       if (data.quotaExceeded) {
         recordTokens(data.tokensUsed || 100);
@@ -873,7 +878,7 @@ export const VoiceModeView: React.FC<VoiceModeViewProps> = ({
                 ? 'Playing audio response in selected tradition.'
                 : isProcessing
                   ? 'Formulating response from classical corpus.'
-                  : 'Press and hold the button, speak, then release to send.'}
+                  : 'Tap to speak, then tap again to send.'}
         </p>
 
         {voiceError && (

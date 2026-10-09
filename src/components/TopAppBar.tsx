@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Globe2, Volume2, VolumeX, LogOut } from 'lucide-react';
+import { BookOpen, Globe2, Volume2, VolumeX, LogOut, UserCircle } from 'lucide-react';
 import { LanguageTradition } from '../types';
 import { sound } from '../utils/audio';
 
@@ -32,16 +32,16 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
 
   return (
     <header className="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-4 sm:px-8 h-16 bg-[#0A0A0A]/90 backdrop-blur-md border-b border-white/10 transition-all duration-200">
-      {/* Left: Book / Tradition switcher */}
-      <div className="flex items-center gap-3">
+      {/* Left: Book / Tradition switcher — shrink-0 + mr-6 ensures a clear gap before the nav links */}
+      <div className="flex items-center gap-3 shrink-0 mr-6">
         <button
           id="btn-open-traditions"
           onClick={onOpenTraditions}
           title="Switch Tradition"
-          className="p-2 -ml-2 rounded-xl text-white/80 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2 group cursor-pointer"
+          className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2 group cursor-pointer"
         >
           <BookOpen className="w-5 h-5 text-[#C5A059] group-hover:scale-105 transition-transform" />
-          <span className="hidden sm:inline-block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A059] bg-[#C5A059]/10 px-2.5 py-1 rounded-full border border-[#C5A059]/30">
+          <span className="hidden sm:inline-block whitespace-nowrap shrink-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A059] bg-[#C5A059]/10 px-2.5 py-1 rounded-full border border-[#C5A059]/30">
             {currentTradition.name}
           </span>
         </button>
@@ -54,8 +54,8 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         </h1>
       </div>
 
-      {/* Center: Desktop Navigation */}
-      <nav className="hidden md:flex items-center gap-2">
+      {/* Center: Desktop Navigation — min-w-0 lets it yield space to the brand group */}
+      <nav className="hidden md:flex items-center gap-1 min-w-0">
         {[
           { id: 'home', label: 'Home' },
           { id: 'learn', label: 'Learn' },
@@ -82,7 +82,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
       </nav>
 
       {/* Right: Sound Controls, Tradition quick switch & Streak Badge */}
-      <div className="flex items-center gap-2 sm:gap-2.5">
+      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
         <button
           id="btn-sound-mute-toggle"
           onClick={handleToggleSound}
@@ -109,6 +109,16 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           <span>{streakDays}</span>
           <span className="text-sm">🔥</span>
         </div>
+
+        {/* Mobile-only Profile shortcut in top bar */}
+        <button
+          id="btn-mobile-profile"
+          onClick={() => onTabChange('profile')}
+          title="Profile"
+          className="md:hidden p-2 rounded-full bg-white/[0.04] border border-white/10 text-white/50 hover:text-[#C5A059] hover:border-[#C5A059]/30 hover:bg-[#C5A059]/10 transition-colors cursor-pointer"
+        >
+          <UserCircle className="w-3.5 h-3.5" />
+        </button>
 
         <button
           id="btn-sign-out"
