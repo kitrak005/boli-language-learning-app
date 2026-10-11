@@ -389,6 +389,8 @@ export default function App() {
       <TopAppBar
         currentTradition={currentTradition}
         streakDays={profile.streakDays}
+        dailyXp={profile.dailyXp}
+        avatarUrl={profile.avatarUrl}
         activeTab={activeTab}
         onTabChange={(tab) => {
           sound.playTileClick();
@@ -399,7 +401,7 @@ export default function App() {
       />
 
       {/* Main Content Area with fluid max-width */}
-      <main className="pt-24 pb-28 md:pb-12 px-4 sm:px-8 max-w-4xl mx-auto w-full flex-grow">
+      <main className={`pt-24 pb-28 md:pb-12 px-2 sm:px-4 md:px-6 lg:px-8 ${activeTab === 'home' ? 'max-w-7xl' : 'max-w-4xl'} mx-auto w-full flex-grow`}>
         {activeTab === 'home' && (
           <HomeView
             currentTradition={currentTradition}
@@ -410,6 +412,8 @@ export default function App() {
             onOpenTraditions={() => setIsTraditionModalOpen(true)}
             onStartMatch={() => setActiveTab('battle')}
             onOpenLeaderboard={() => setActiveTab('leaderboard')}
+            onStartVoice={() => setActiveTab('voice')}
+            onAskGuru={() => setActiveTab('askguru')}
             onUpdateDailyGoal={(newGoal) => {
               setProfile((prev) => {
                 const nextProfile = {

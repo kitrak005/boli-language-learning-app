@@ -9,6 +9,7 @@ interface DailyGoalTrackerProps {
   onUpdateGoal?: (newGoal: number) => void;
   onStartStudy?: () => void;
   onCelebrate?: () => void;
+  className?: string;
 }
 
 const PRESET_GOALS = [
@@ -25,6 +26,7 @@ export const DailyGoalTracker: React.FC<DailyGoalTrackerProps> = ({
   onUpdateGoal,
   onStartStudy,
   onCelebrate,
+  className = '',
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<number>(maxDailyXp || 20);
@@ -68,7 +70,7 @@ export const DailyGoalTracker: React.FC<DailyGoalTrackerProps> = ({
   return (
     <section
       id="daily-goal-section"
-      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#151515] via-[#121212] to-[#0D0D0D] border border-white/10 hover:border-[#C5A059]/40 transition-all p-5 sm:p-7 shadow-xl group"
+      className={`relative overflow-hidden rounded-2xl bg-[#121110] border border-amber-500/20 hover:border-amber-500/40 transition-all p-5 shadow-xl group ${className}`}
     >
       {/* Subtle background glow when achieved */}
       {isGoalReached && (
@@ -110,122 +112,101 @@ export const DailyGoalTracker: React.FC<DailyGoalTrackerProps> = ({
       </div>
 
       {/* Main Tracker Layout: Circular Progress + Analytics */}
-      <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8 justify-between">
-        {/* Visual Circular Progress Indicator */}
-        <div className="relative flex items-center justify-center select-none flex-shrink-0">
-          <svg className="w-32 h-32 sm:w-36 sm:h-36 -rotate-90 transform" viewBox="0 0 110 110">
-            <defs>
-              <linearGradient id="gold-goal-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#DFC386" />
-                <stop offset="50%" stopColor="#C5A059" />
-                <stop offset="100%" stopColor="#9C7733" />
-              </linearGradient>
-              <filter id="goal-glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
+      <div className="space-y-4">
+        <div className="flex items-center gap-4 sm:gap-5">
+          {/* Visual Circular Progress Indicator */}
+          <div className="relative flex items-center justify-center select-none flex-shrink-0">
+            <svg className="w-24 h-24 sm:w-28 sm:h-28 -rotate-90 transform" viewBox="0 0 110 110">
+              <defs>
+                <linearGradient id="gold-goal-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#DFC386" />
+                  <stop offset="50%" stopColor="#C5A059" />
+                  <stop offset="100%" stopColor="#9C7733" />
+                </linearGradient>
+                <filter id="goal-glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
 
-            {/* Background Track Circle */}
-            <circle
-              cx="55"
-              cy="55"
-              r={radius}
-              className="text-white/10 stroke-current"
-              strokeWidth="8"
-              fill="transparent"
-            />
+              {/* Background Track Circle */}
+              <circle
+                cx="55"
+                cy="55"
+                r={radius}
+                className="text-white/10 stroke-current"
+                strokeWidth="8"
+                fill="transparent"
+              />
 
-            {/* Glowing / Active Stroke Progress Circle */}
-            <circle
-              cx="55"
-              cy="55"
-              r={radius}
-              stroke="url(#gold-goal-grad)"
-              strokeWidth="8"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-              fill="transparent"
-              className="transition-all duration-1000 ease-out"
-              filter={isGoalReached ? 'url(#goal-glow)' : undefined}
-            />
-          </svg>
+              {/* Glowing / Active Stroke Progress Circle */}
+              <circle
+                cx="55"
+                cy="55"
+                r={radius}
+                stroke="url(#gold-goal-grad)"
+                strokeWidth="8"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                fill="transparent"
+                className="transition-all duration-1000 ease-out"
+                filter={isGoalReached ? 'url(#goal-glow)' : undefined}
+              />
+            </svg>
 
-          {/* Center Visual Content */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-            {isGoalReached ? (
-              <div className="flex flex-col items-center animate-in zoom-in-75 duration-300">
-                <Trophy className="w-6 h-6 text-[#C5A059] mb-0.5" />
-                <span className="text-xl sm:text-2xl font-bold font-serif text-white leading-none">
-                  {percentage}%
-                </span>
-                <span className="text-[9px] uppercase tracking-wider text-[#C5A059] font-bold mt-0.5">
-                  Achieved
-                </span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center">
-                <div className="flex items-center text-[#C5A059] mb-0.5">
-                  <Zap className="w-3.5 h-3.5 fill-[#C5A059]" />
-                </div>
-                <span className="text-2xl sm:text-3xl font-bold font-serif text-white leading-none">
-                  {dailyXp}
-                </span>
-                <span className="text-[10px] text-white/50 font-medium font-mono mt-0.5">
-                  / {goal} XP
-                </span>
-              </div>
+            {/* Center Visual Content */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+              <span className="text-xl sm:text-2xl font-bold font-serif text-white leading-none">
+                {percentage}%
+              </span>
+            </div>
+          </div>
+
+          {/* Narrative & Motivation Card */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <h4 className="font-serif text-base sm:text-lg font-bold text-white leading-snug">
+              {isGoalReached ? 'XP GOAL ACHIEVED' : `${percentage}% OF DAILY GOAL`}
+            </h4>
+            <p className="text-xs text-white/60">
+              {dailyXp} / {goal} XP earned today
+            </p>
+            {isGoalReached && onCelebrate && (
+              <button
+                id="btn-celebrate-daily-goal"
+                onClick={handleTriggerCelebrate}
+                className="mt-1 px-3 py-1 rounded-full bg-gradient-to-r from-[#DFC386] to-[#C5A059] text-black text-[10px] font-bold tracking-wide shadow-sm hover:brightness-110 transition-all flex items-center gap-1 cursor-pointer animate-pulse"
+                title="View Level Up celebration"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Celebrate ✨</span>
+              </button>
             )}
           </div>
         </div>
 
-        {/* Narrative & Motivation Card */}
-        <div className="flex-1 w-full space-y-3 text-center sm:text-left">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-              <span className="text-xs font-semibold text-white">
-                {isGoalReached ? '🎉 Daily Goal Complete!' : `${remainingXp} XP to reach today's target`}
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-[#C5A059]/15 border border-[#C5A059]/30 text-[#C5A059] text-[10px] font-bold">
-                {percentage}% Completed
-              </span>
-              {isGoalReached && onCelebrate && (
-                <button
-                  id="btn-celebrate-daily-goal"
-                  onClick={handleTriggerCelebrate}
-                  className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#DFC386] to-[#C5A059] text-black text-[10px] font-bold tracking-wide shadow-sm hover:brightness-110 transition-all flex items-center gap-1 cursor-pointer animate-pulse"
-                  title="View Level Up celebration"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Celebrate ✨</span>
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-white/60 font-light leading-relaxed">
-              {isGoalReached
-                ? 'Your daily study devotion (Svādhyāya) is fulfilled. Continue learning to earn bonus mastery points!'
-                : 'Every Sanskrit word translated and card reviewed brings you closer to classical fluency.'}
-            </p>
-          </div>
-
+        {/* Daily Goal Summary Header */}
+        <div className="pt-3 border-t border-white/5 space-y-2">
+          <span className="text-[10px] uppercase font-bold tracking-[0.18em] text-white/50 block">
+            DAILY GOAL SUMMARY
+          </span>
           {/* Quick Metrics Badge Group */}
-          <div className="grid grid-cols-3 gap-2 pt-1">
+          <div className="grid grid-cols-3 gap-2">
             <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2.5 text-center">
               <span className="text-[10px] uppercase text-white/40 font-medium block">Streak</span>
-              <span className="text-sm font-bold text-white flex items-center justify-center gap-1 mt-0.5">
+              <span className="text-xs sm:text-sm font-bold text-white flex items-center justify-center gap-1 mt-0.5">
                 <Flame className="w-3 h-3 text-[#C5A059] fill-[#C5A059]" /> {streakDays}d
               </span>
             </div>
 
             <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2.5 text-center">
               <span className="text-[10px] uppercase text-white/40 font-medium block">Target</span>
-              <span className="text-sm font-bold text-[#C5A059] mt-0.5 block">{goal} XP</span>
+              <span className="text-xs sm:text-sm font-bold text-[#C5A059] mt-0.5 block">{goal} XP</span>
             </div>
 
             <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2.5 text-center">
               <span className="text-[10px] uppercase text-white/40 font-medium block">Earned</span>
-              <span className="text-sm font-bold text-white mt-0.5 block">+{dailyXp} XP</span>
+              <span className="text-xs sm:text-sm font-bold text-emerald-400 mt-0.5 block">+{dailyXp} XP</span>
             </div>
           </div>
         </div>
