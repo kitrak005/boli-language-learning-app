@@ -198,6 +198,15 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
   const [audioMuted, setAudioMuted] = useState(sound.getIsMuted());
   const [selectedNode, setSelectedNode] = useState<PathwayNodeItem | null>(null);
 
+  // DOM element refs for measuring exact coordinates of Level 1 card & all node buttons
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const levelCardRefs = useRef<Map<string | number, HTMLDivElement>>(new Map());
+  const nodeBtnRefs = useRef<Map<string | number, HTMLButtonElement>>(new Map());
+
+  // Dynamic measured SVG path & container size
+  const [svgPathD, setSvgPathD] = useState<string>('');
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 512, height: 1200 });
+
   const handleToggleAudio = () => {
     const nextMuted = sound.toggleMute();
     setAudioMuted(nextMuted);
@@ -325,51 +334,124 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
     }
   };
 
-  // Generate smooth curved organic SVG spline coordinates connecting all node items
-  // Note: NO static vertical line is drawn; only the organic winding S-curve connector
-  const { fullPathD, completedPathD } = useMemo(() => {
-    const points: { x: number; y: number; status?: string }[] = [];
-    let currentY = 80;
+  // Immediate fallback curve (starts at Level 1 bottom center) before dynamic layout finishes measuring
+  const fallbackPathD = useMemo(() => {
+    const points: { x: number; y: number }[] = [];
+    let currentY = 100;
+
+    // Start directly from the bottom-center of the LEVEL 1 card container
+    points.push({ x: 256, y: currentY });
 
     pathwayItems.forEach((item) => {
       if (item.type === 'level_header') {
-        currentY += 90;
+        currentY += 100;
+        points.push({ x: 256, y: currentY });
       } else {
-        const x = 256 + (item.xOffset || 0);
-        points.push({ x, y: currentY, status: item.status });
         currentY += 135;
+        const x = 256 + (item.xOffset || 0);
+        points.push({ x, y: currentY });
       }
     });
 
-    if (points.length < 2) {
-      return { fullPathD: '', completedPathD: '' };
-    }
+    if (points.length < 2) return '';
 
-    // Build smooth cubic bezier curve
-    let fullD = `M ${points[0].x} ${points[0].y}`;
+    let d = `M ${points[0].x} ${points[0].y}`;
     for (let i = 0; i < points.length - 1; i++) {
       const p0 = points[i];
       const p1 = points[i + 1];
       const midY = (p0.y + p1.y) / 2;
-      fullD += ` C ${p0.x} ${midY}, ${p1.x} ${midY}, ${p1.x} ${p1.y}`;
+      d += ` C ${p0.x} ${midY}, ${p1.x} ${midY}, ${p1.x} ${p1.y}`;
     }
+    return d;
+  }, [pathwayItems]);
 
-    // Find active node index for illuminated gold path
-    const activeIdx = points.findIndex((p) => p.status === 'active');
-    let compD = '';
-    const endIndex = activeIdx >= 0 ? activeIdx : 0;
+  // Recalculate dynamic SVG path connecting Level 1 bottom-center to every node's exact center coordinates
+  const updateDynamicPath = () => {
+    const container = containerRef.current;
+    if (!container) return;
 
-    if (endIndex > 0) {
-      compD = `M ${points[0].x} ${points[0].y}`;
-      for (let i = 0; i < endIndex; i++) {
-        const p0 = points[i];
-        const p1 = points[i + 1];
-        const midY = (p0.y + p1.y) / 2;
-        compD += ` C ${p0.x} ${midY}, ${p1.x} ${midY}, ${p1.x} ${p1.y}`;
+    const containerRect = container.getBoundingClientRect();
+    const width = containerRect.width || 512;
+    const height = containerRect.height || 1200;
+
+    setContainerSize({ width, height });
+
+    const points: { x: number; y: number }[] = [];
+
+    // 1. LINE START POINT: Start directly from the bottom-center of the "LEVEL 1" card container
+    const firstHeader = pathwayItems.find((item) => item.type === 'level_header');
+    if (firstHeader) {
+      const level1El = levelCardRefs.current.get(firstHeader.id);
+      if (level1El) {
+        const rect = level1El.getBoundingClientRect();
+        points.push({
+          x: rect.left + rect.width / 2 - containerRect.left,
+          y: rect.bottom - containerRect.top,
+        });
       }
     }
 
-    return { fullPathD: fullD, completedPathD: compD };
+    // 2. FLUID & CONTINUOUS PATH: Pass directly through the exact center coordinates of every node button down the list
+    pathwayItems.forEach((item) => {
+      if (item.type === 'level_header') {
+        // For any subsequent level header, enter top-center and exit bottom-center
+        if (firstHeader && item.id !== firstHeader.id) {
+          const levelEl = levelCardRefs.current.get(item.id);
+          if (levelEl) {
+            const rect = levelEl.getBoundingClientRect();
+            points.push({
+              x: rect.left + rect.width / 2 - containerRect.left,
+              y: rect.top - containerRect.top,
+            });
+            points.push({
+              x: rect.left + rect.width / 2 - containerRect.left,
+              y: rect.bottom - containerRect.top,
+            });
+          }
+        }
+      } else {
+        const btnEl = nodeBtnRefs.current.get(item.id);
+        if (btnEl) {
+          const rect = btnEl.getBoundingClientRect();
+          points.push({
+            x: rect.left + rect.width / 2 - containerRect.left,
+            y: rect.top + rect.height / 2 - containerRect.top,
+          });
+        }
+      }
+    });
+
+    if (points.length >= 2) {
+      let d = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i + 1];
+        const midY = (p0.y + p1.y) / 2;
+        d += ` C ${p0.x} ${midY}, ${p1.x} ${midY}, ${p1.x} ${p1.y}`;
+      }
+      setSvgPathD(d);
+    }
+  };
+
+  useEffect(() => {
+    updateDynamicPath();
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateDynamicPath();
+    });
+    resizeObserver.observe(container);
+
+    window.addEventListener('resize', updateDynamicPath);
+    const timer = setTimeout(updateDynamicPath, 150);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateDynamicPath);
+      clearTimeout(timer);
+    };
   }, [pathwayItems]);
 
   // Track level header count for left/right alternation & cycling Lottie URLs
@@ -505,42 +587,48 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
         </div>
 
         {/* ── PATHWAY SPINE AND NODES CONTAINER ────────────────────────────── */}
-        <div className="relative w-full max-w-lg flex flex-col items-center py-4">
+        <div 
+          ref={containerRef}
+          className="relative w-full max-w-lg flex flex-col items-center py-4"
+        >
 
-          {/* Background Connecting Organic SVG Spline (NO straight central lines) */}
+          {/* ── GLOWING GOLD SVG CURVED CONNECTING PATH (NO straight background lines) ── */}
           <svg 
             className="absolute top-0 left-0 w-full h-full pointer-events-none z-0 overflow-visible" 
-            viewBox="0 0 512 1200"
-            preserveAspectRatio="none"
-            style={{ filter: 'drop-shadow(0px 0px 8px rgba(212, 175, 55, 0.35))' }}
+            viewBox={`0 0 ${containerSize.width} ${containerSize.height}`}
+            style={{ 
+              filter: 'drop-shadow(0px 0px 6px rgba(212, 175, 55, 0.5)) drop-shadow(0px 0px 14px rgba(212, 175, 55, 0.25))' 
+            }}
           >
             <defs>
               <linearGradient id="goldPathGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#FFF5D6" />
                 <stop offset="50%" stopColor="#D4AF37" />
-                <stop offset="100%" stopColor="#AA7C11" />
+                <stop offset="100%" stopColor="#F59E0B" />
               </linearGradient>
             </defs>
 
-            {/* Subtle dashed curved background guide */}
+            {/* Subtle outer blur glow aura for rich luminescent depth */}
             <path
-              d={fullPathD || "M 256 70 Q 220 160 226 210 T 276 350 T 300 490 T 266 630 T 216 770 T 240 910"}
+              d={svgPathD || fallbackPathD}
               fill="none"
-              stroke="#3D3222"
-              strokeWidth="4"
-              strokeDasharray="8 8"
+              stroke="#D4AF37"
+              strokeWidth="7"
+              strokeOpacity="0.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
 
-            {/* Illuminated gold section up to the active node */}
-            {completedPathD && (
-              <path
-                d={completedPathD}
-                fill="none"
-                stroke="url(#goldPathGradient)"
-                strokeWidth="5"
-                strokeLinecap="round"
-              />
-            )}
+            {/* Main fluid continuous SVG curved path passing directly through every node */}
+            <path
+              d={svgPathD || fallbackPathD}
+              fill="none"
+              stroke="#D4AF37"
+              strokeWidth="3"
+              strokeOpacity="0.65"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
 
           {/* Loop through pathway node items */}
@@ -565,8 +653,14 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
                 <div key={node.id} className="relative z-20 my-8 flex items-center justify-center w-full">
                   <div className="relative flex items-center justify-center">
                     
-                    {/* Level Section Header Card */}
-                    <div className="relative inline-flex flex-col items-center max-w-[210px] sm:max-w-xs bg-[#17130F]/90 border border-[#D4AF37]/60 rounded-2xl px-5 py-2.5 sm:px-6 sm:py-3 shadow-[0_0_25px_rgba(212,175,55,0.15)] backdrop-blur-md">
+                    {/* Level Section Header Card (Line starts directly from bottom-center of LEVEL 1) */}
+                    <div 
+                      ref={(el) => {
+                        if (el) levelCardRefs.current.set(node.id, el);
+                        else levelCardRefs.current.delete(node.id);
+                      }}
+                      className="relative inline-flex flex-col items-center max-w-[210px] sm:max-w-xs bg-[#17130F]/90 border border-[#D4AF37]/60 rounded-2xl px-5 py-2.5 sm:px-6 sm:py-3 shadow-[0_0_25px_rgba(212,175,55,0.15)] backdrop-blur-md"
+                    >
                       {/* Top ambient highlight */}
                       <div className="absolute top-0 inset-x-6 sm:inset-x-8 h-px bg-gradient-to-r from-transparent via-[#F5E6C8] to-transparent" />
                       
@@ -645,6 +739,10 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
                   )}
 
                   <button
+                    ref={(el) => {
+                      if (el) nodeBtnRefs.current.set(node.id, el);
+                      else nodeBtnRefs.current.delete(node.id);
+                    }}
                     onClick={() => handleNodeClick(node)}
                     aria-label={`${node.title} - ${node.subtitle}`}
                     className={`relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-all duration-300 transform active:scale-95 cursor-pointer select-none ${
