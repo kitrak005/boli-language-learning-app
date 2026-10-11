@@ -196,7 +196,6 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
   const [streakCount] = useState(initialStreak);
   const [coinsCount] = useState(initialCoins);
   const [audioMuted, setAudioMuted] = useState(sound.getIsMuted());
-  const [selectedNode, setSelectedNode] = useState<PathwayNodeItem | null>(null);
 
   // DOM element refs for measuring exact coordinates of Level 1 card & all node buttons
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -305,32 +304,23 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
   const handleNodeClick = (node: PathwayNodeItem) => {
     if (node.status === 'locked') {
       sound.playErrorChime();
-    } else {
-      sound.playTileClick();
+      return;
     }
-    setSelectedNode(node);
-  };
-
-  const handleStartSelectedLesson = () => {
-    if (!selectedNode) return;
-    sound.playSuccessChime();
-    const original = selectedNode.originalNode;
-    const nodeToSelect = original || {
-      id: String(selectedNode.id),
+    sound.playTileClick();
+    const original = node.originalNode;
+    const nodeToSelect = original || ({
+      id: String(node.id),
       levelNumber: 1,
-      title: selectedNode.title,
-      subtitle: selectedNode.subtitle,
-      status: selectedNode.status || 'active',
+      title: node.title,
+      subtitle: node.subtitle,
+      status: node.status || 'active',
       iconType: 'play',
       alignment: 'center',
       exercises: [],
-    } as SkillNode;
+    } as SkillNode);
 
-    setSelectedNode(null);
     if (onSelectNode) {
       onSelectNode(nodeToSelect);
-    } else {
-      alert(`Starting lesson: ${selectedNode.title} (${selectedNode.subtitle})`);
     }
   };
 
@@ -780,62 +770,6 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
             );
           })}
         </div>
-
-        {/* ── INTERACTIVE LESSON MODAL / DIALOG ───────────────────────────── */}
-        {selectedNode && (
-          <div 
-            onClick={() => setSelectedNode(null)}
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          >
-            <div 
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#17130F] border border-[#D4AF37] rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-[0_0_50px_rgba(212,175,55,0.25)] relative"
-            >
-              <div className="w-16 h-16 rounded-full bg-[#2A2218] border border-[#D4AF37] flex items-center justify-center mx-auto text-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.2)]">
-                {selectedNode.type === 'play' && <Play className="w-8 h-8 ml-1 fill-[#D4AF37]" />}
-                {selectedNode.type === 'star' && <Star className="w-8 h-8 fill-[#D4AF37]" />}
-                {selectedNode.type === 'book' && <BookOpen className="w-8 h-8" />}
-                {selectedNode.type === 'audio' && <Volume2 className="w-8 h-8" />}
-                {selectedNode.type === 'check' && <CheckCircle className="w-8 h-8 text-[#D4AF37]" />}
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold tracking-widest text-[#D4AF37] uppercase">
-                  {selectedNode.status === 'completed' ? 'MASTERED LESSON' : selectedNode.status === 'active' ? 'CURRENT FOCUS' : 'LOCKED MILESTONE'}
-                </span>
-                <h3 className="text-xl font-serif font-bold text-[#F5E6C8] mt-1">
-                  {selectedNode.title}
-                </h3>
-                <p className="text-xs text-[#D4AF37] mt-0.5">
-                  {selectedNode.subtitle}
-                </p>
-              </div>
-
-              <p className="text-xs text-[#A09585] leading-relaxed">
-                {selectedNode.status === 'locked' 
-                  ? "Master preceding foundational lessons to unlock this classical path!" 
-                  : `Earn +${selectedNode.xp || 20} XP and deepen your classical fluency.`}
-              </p>
-
-              <div className="flex gap-3 pt-2">
-                <button 
-                  onClick={() => setSelectedNode(null)}
-                  className="flex-1 py-2.5 rounded-full border border-[#3A3022] text-xs font-semibold text-[#A09585] hover:text-[#E5E0D8] hover:bg-[#251F19] transition-all cursor-pointer"
-                >
-                  Close
-                </button>
-                {selectedNode.status !== 'locked' && (
-                  <button 
-                    onClick={handleStartSelectedLesson}
-                    className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#996515] text-[#0A0908] font-bold text-xs shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-                  >
-                    Start Lesson
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
       </main>
 
