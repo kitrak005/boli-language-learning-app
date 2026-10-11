@@ -511,10 +511,6 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
 
         {/* ── PATHWAY SPINE AND NODES CONTAINER ────────────────────────────── */}
         <div className="relative w-full max-w-lg flex flex-col items-center py-4">
-          
-          {/* Centrally aligned glowing vertical guide line */}
-          <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 bg-amber-500/20 blur-[1px] pointer-events-none z-0" />
-          <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-gradient-to-b from-[#D4AF37]/40 via-[#D4AF37]/20 to-transparent pointer-events-none z-0" />
 
           {/* Background Connecting SVG Line */}
           <svg 
