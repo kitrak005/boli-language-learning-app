@@ -5,11 +5,11 @@ import { sound } from '../utils/audio';
 import {
   MagneticDock,
   DockIconHome,
-  DockIconFolder,
-  DockIconSearch,
-  DockIconMusic,
-  DockIconMail,
-  DockIconSettings,
+  DockIconLearn,
+  DockIconPractice,
+  DockIconBattle,
+  DockIconLeaderboard,
+  DockIconAskGuru,
   type DockItemData,
 } from './MagneticDock';
 
@@ -59,7 +59,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     {
       id: 'learn',
       label: 'Learn',
-      icon: <DockIconFolder />,
+      icon: <DockIconLearn />,
       isActive: activeTab === 'learn',
       onClick: () => {
         sound.playTileClick();
@@ -69,7 +69,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     {
       id: 'practice',
       label: 'Practice',
-      icon: <DockIconSearch />,
+      icon: <DockIconPractice />,
       isActive: activeTab === 'practice',
       onClick: () => {
         sound.playTileClick();
@@ -78,8 +78,8 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     },
     {
       id: 'battle',
-      label: 'Battles',
-      icon: <DockIconMusic />,
+      label: 'Battle',
+      icon: <DockIconBattle />,
       isActive: activeTab === 'battle',
       onClick: () => {
         sound.playTileClick();
@@ -89,7 +89,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     {
       id: 'leaderboard',
       label: 'Leaderboard',
-      icon: <DockIconMail />,
+      icon: <DockIconLeaderboard />,
       isActive: activeTab === 'leaderboard',
       onClick: () => {
         sound.playTileClick();
@@ -99,7 +99,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     {
       id: 'askguru',
       label: 'Ask Guru',
-      icon: <DockIconSettings />,
+      icon: <DockIconAskGuru />,
       isActive: activeTab === 'askguru',
       onClick: () => {
         sound.playTileClick();
