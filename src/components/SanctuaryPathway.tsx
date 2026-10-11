@@ -2,31 +2,29 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Flame, 
   Volume2, 
-  VolumeX,
+  VolumeX, 
   BookOpen, 
   Play, 
   Star, 
   Lock, 
   CheckCircle, 
-  Award, 
   Compass, 
   Home, 
   Swords, 
   Sparkles, 
-  User, 
-  MessageSquare,
-  ChevronDown,
-  LogOut,
-  Trophy,
-  Mic,
-  Zap,
-  RotateCcw
+  MessageSquare, 
+  ChevronDown, 
+  LogOut, 
+  Trophy, 
+  Mic, 
+  Zap 
 } from 'lucide-react';
 import { LanguageTradition, SkillNode } from '../types';
 import { sound } from '../utils/audio';
 
-// Rotating array of Lottie URLs across pathway nodes
-const LOTTIE_URLS = [
+// Rotating array of Lottie URLs across Level Section Headers
+const LEVEL_LOTTIE_URLS = [
+  'https://lottie.host/0d7d5633-f6ab-45ea-9e32-147ee6188c4f/H4tG63u523.json', // Pink Bear
   'https://lottie.host/1d351d64-6656-4f80-911e-a199736aaff8/QJoxOhulm8.json',
   'https://lottie.host/b4159218-107d-4ada-8232-a64aa9c4f88c/aDxUTzEcrA.json',
   'https://lottie.host/2dfc25b8-6b48-4430-a53a-41537cae2fbe/mkJTflo2BQ.json',
@@ -129,6 +127,13 @@ const DEFAULT_LEVEL_DATA: {
       xOffset: 44
     },
     {
+      id: "lvl-2",
+      type: "level_header",
+      title: "LEVEL 2",
+      subtitle: "Preferences & Choices",
+      tag: "A1.2"
+    },
+    {
       id: "node-5",
       type: "star",
       title: "City Walk",
@@ -184,40 +189,14 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
   onSignOut,
   onOpenTraditions,
 }) => {
-  const lottieLoaded = useLottiePlayer();
+  useLottiePlayer();
   const [internalActiveTab, setInternalActiveTab] = useState('LEARN');
   const currentTab = controlledActiveTab ? controlledActiveTab.toUpperCase() : internalActiveTab;
-
-  // Track hovered node & companion for localized speech bubble reveals
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | number | null>(null);
-  const [hoveredCompanionId, setHoveredCompanionId] = useState<string | number | null>(null);
 
   const [streakCount] = useState(initialStreak);
   const [coinsCount] = useState(initialCoins);
   const [audioMuted, setAudioMuted] = useState(sound.getIsMuted());
   const [selectedNode, setSelectedNode] = useState<PathwayNodeItem | null>(null);
-
-  // Motivational Sanskrit and classical encouraging phrases per companion
-  const motivationalPhrases = [
-    "Ready for today's Sanskrit lesson? 🚀",
-    "शुभमस्तु! Let's practice! 🪷",
-    "अस्तु! Let's conquer this path! 🔥",
-    "Keep up the streak, Acharya! ✨",
-    "Sanskrit is the music of wisdom 🕉️",
-    "विद्या ददाति विनयं — Knowledge brings humility! 📖",
-    "अभ्यासः परमं बलम् — Practice is true strength! ⚡"
-  ];
-
-  // Store click dialogue rotation offsets for each companion
-  const [companionDialogueOffsets, setCompanionDialogueOffsets] = useState<Record<string | number, number>>({});
-
-  const handleCompanionClick = (nodeId: string | number) => {
-    sound.playSuccessChime();
-    setCompanionDialogueOffsets((prev) => ({
-      ...prev,
-      [nodeId]: ((prev[nodeId] || 0) + 1) % motivationalPhrases.length,
-    }));
-  };
 
   const handleToggleAudio = () => {
     const nextMuted = sound.toggleMute();
@@ -393,8 +372,8 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
     return { fullPathD: fullD, completedPathD: compD };
   }, [pathwayItems]);
 
-  // Keep track of lesson index for alternating companion positioning
-  let lessonCounter = 0;
+  // Track level header count for left/right alternation & cycling Lottie URLs
+  let levelHeaderCounter = 0;
 
   return (
     <div className="min-h-screen bg-[#0A0908] text-[#E5E0D8] font-sans selection:bg-[#D4AF37]/30 selection:text-white flex flex-col overflow-x-hidden relative">
@@ -567,70 +546,87 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
           {/* Loop through pathway node items */}
           {pathwayItems.map((node) => {
             
-            // Level Header Banner
+            // ── 1. MAIN LEVEL SECTION HEADERS (WITH ALTERNATING LOTTIE COMPANIONS) ──
             if (node.type === "level_header") {
+              const currentHeaderIndex = levelHeaderCounter;
+              levelHeaderCounter++;
+
+              // Alternating placement:
+              // Level 1: RIGHT side (index 0)
+              // Level 2: LEFT side (index 1)
+              // Level 3: RIGHT side (index 2)
+              // ...
+              const isRight = currentHeaderIndex % 2 === 0;
+
+              // Cycle through the 4 Lottie animation URLs
+              const lottieUrl = LEVEL_LOTTIE_URLS[currentHeaderIndex % LEVEL_LOTTIE_URLS.length];
+
               return (
-                <div key={node.id} className="relative z-10 my-8 text-center w-full max-w-xs">
-                  <div className="relative inline-flex flex-col items-center w-full bg-[#17130F]/90 border border-[#D4AF37]/60 rounded-2xl px-6 py-3 shadow-[0_0_25px_rgba(212,175,55,0.15)] backdrop-blur-md">
-                    {/* Top ambient highlight */}
-                    <div className="absolute top-0 inset-x-8 h-px bg-gradient-to-r from-transparent via-[#F5E6C8] to-transparent" />
+                <div key={node.id} className="relative z-20 my-8 flex items-center justify-center w-full">
+                  <div className="relative flex items-center justify-center">
                     
-                    <span className="text-[10px] tracking-widest font-bold text-[#D4AF37] uppercase">
-                      {node.title}
-                    </span>
-                    <span className="text-sm font-serif font-bold text-[#F5E6C8] mt-0.5">
-                      {node.subtitle}
-                    </span>
-                    {node.tag && (
-                      <span className="text-[9px] text-[#8C8070] font-mono mt-1 px-2 py-0.5 rounded bg-[#0A0908]/80 border border-[#2A241D]">
-                        {node.tag}
+                    {/* Level Section Header Card */}
+                    <div className="relative inline-flex flex-col items-center max-w-[210px] sm:max-w-xs bg-[#17130F]/90 border border-[#D4AF37]/60 rounded-2xl px-5 py-2.5 sm:px-6 sm:py-3 shadow-[0_0_25px_rgba(212,175,55,0.15)] backdrop-blur-md">
+                      {/* Top ambient highlight */}
+                      <div className="absolute top-0 inset-x-6 sm:inset-x-8 h-px bg-gradient-to-r from-transparent via-[#F5E6C8] to-transparent" />
+                      
+                      <span className="text-[10px] tracking-widest font-bold text-[#D4AF37] uppercase">
+                        {node.title}
                       </span>
-                    )}
+                      <span className="text-sm font-serif font-bold text-[#F5E6C8] mt-0.5 text-center">
+                        {node.subtitle}
+                      </span>
+                      {node.tag && (
+                        <span className="text-[9px] text-[#8C8070] font-mono mt-1 px-2 py-0.5 rounded bg-[#0A0908]/80 border border-[#2A241D]">
+                          {node.tag}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Lottie Animated Companion positioned beside Level Header */}
+                    <div
+                      onClick={() => sound.playSuccessChime()}
+                      className={`absolute top-1/2 -translate-y-1/2 flex items-center pointer-events-auto cursor-pointer z-30 select-none ${
+                        isRight
+                          ? 'left-[calc(100%+10px)] sm:left-[calc(100%+18px)]'
+                          : 'right-[calc(100%+10px)] sm:right-[calc(100%+18px)]'
+                      }`}
+                      title={`${node.title} Companion`}
+                    >
+                      <div className="relative w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 transform hover:scale-110 active:scale-95 transition-transform duration-300 flex items-center justify-center">
+                        {/* Subtle ambient glowing base (NO speech bubble) */}
+                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-16 sm:w-24 h-5 sm:h-8 bg-amber-500/15 blur-xl rounded-full pointer-events-none animate-pulse" />
+
+                        {/* Animated Lottie Player */}
+                        <dotlottie-player
+                          src={lottieUrl}
+                          background="transparent"
+                          speed="1"
+                          style={{ width: '100%', height: '100%' }}
+                          loop
+                          autoplay
+                        ></dotlottie-player>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               );
             }
 
-            // Lesson Node Calculations
-            const currentLessonIndex = lessonCounter;
-            lessonCounter++;
-
-            // Zig-zag alternating side pattern:
-            // Node 1 (index 0): LEFT
-            // Node 2 (index 1): RIGHT
-            // Node 3 (index 2): LEFT
-            // Node 4 (index 3): RIGHT
-            const isLeft = currentLessonIndex % 2 === 0;
-
-            // Cycle through the 3 Lottie URLs
-            const lottieUrl = LOTTIE_URLS[currentLessonIndex % LOTTIE_URLS.length];
-
+            // ── 2. INDIVIDUAL LESSON NODES (CLEAN, NO COMPANIONS, NO SPEECH BUBBLES) ──
             const isActive = node.status === 'active';
             const isCompleted = node.status === 'completed';
             const isLocked = node.status === 'locked';
-
-            const isNodeHovered = hoveredNodeId === node.id;
-            const isCompanionHovered = hoveredCompanionId === node.id;
-            const isThisHovered = isNodeHovered || isCompanionHovered;
-
-            // Speech bubble is visible on active node OR when hovered
-            const showSpeechBubble = isActive || isThisHovered;
-
-            // Contextual dialogue message for this node
-            const offset = companionDialogueOffsets[node.id] || 0;
-            const phraseIdx = (currentLessonIndex + offset) % motivationalPhrases.length;
-            const companionPhrase = motivationalPhrases[phraseIdx];
 
             return (
               <div 
                 key={node.id}
                 ref={isActive ? activeNodeRef : null}
-                className={`relative my-6 flex flex-col items-center group transition-all duration-200 ${
-                  showSpeechBubble ? 'z-50' : 'z-20'
-                }`}
+                className="relative my-6 flex flex-col items-center group z-10 transition-all duration-200"
                 style={{ transform: `translateX(${node.xOffset || 0}px)` }}
               >
-                {/* Node Title Tooltip Banner */}
+                {/* Node Title Banner */}
                 <div className="mb-2 px-3 py-1 rounded-lg bg-[#181410]/95 border border-[#3A3022] text-center shadow-lg transition-transform duration-200 group-hover:scale-105 backdrop-blur-xs">
                   <div className="text-[10px] uppercase tracking-wider text-[#A09585] font-semibold">
                     {node.title}
@@ -649,8 +645,6 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
                   )}
 
                   <button
-                    onMouseEnter={() => setHoveredNodeId(node.id)}
-                    onMouseLeave={() => setHoveredNodeId(null)}
                     onClick={() => handleNodeClick(node)}
                     aria-label={`${node.title} - ${node.subtitle}`}
                     className={`relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-all duration-300 transform active:scale-95 cursor-pointer select-none ${
@@ -682,75 +676,6 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
                       <CheckCircle className="w-4 h-4 text-[#D4AF37] fill-[#D4AF37]/20" />
                     </div>
                   )}
-
-                  {/* ── ALTERNATING LOTTIE COMPANION & DYNAMIC SPEECH BUBBLE ──────── */}
-                  <div 
-                    className={`absolute top-1/2 -translate-y-1/2 flex items-center pointer-events-auto z-50 ${
-                      isLeft
-                        ? 'right-[calc(100%+12px)] sm:right-[calc(100%+20px)] flex-row'
-                        : 'left-[calc(100%+12px)] sm:left-[calc(100%+20px)] flex-row'
-                    }`}
-                  >
-                    
-                    {/* DYNAMIC SPEECH BUBBLE (Elevated above SVG and sibling nodes) */}
-                    <div
-                      className={`absolute bottom-full left-1/2 -translate-x-1/2 sm:translate-x-0 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 mb-2 sm:mb-0 bg-[#1A1815] border-2 border-[#D4AF37] text-[#F5E6C8] px-3.5 py-2 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.9),0_0_20px_rgba(212,175,55,0.25)] text-xs sm:text-sm font-medium transition-all duration-300 transform z-50 max-w-[190px] sm:max-w-[240px] whitespace-normal text-center sm:text-left leading-snug ${
-                        isLeft 
-                          ? 'sm:left-[100%] sm:ml-3 origin-center sm:origin-left' 
-                          : 'sm:right-[100%] sm:mr-3 origin-center sm:origin-right'
-                      } ${
-                        showSpeechBubble
-                          ? 'opacity-100 scale-100 pointer-events-auto'
-                          : 'opacity-0 scale-90 pointer-events-none'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>{companionPhrase}</span>
-                      </div>
-
-                      {/* Desktop Pointer Arrow */}
-                      {isLeft ? (
-                        /* Pointer arrow for LEFT character: points LEFT towards character */
-                        <>
-                          <div className="hidden sm:block absolute left-[-8px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[8px] border-r-[#D4AF37]" />
-                          <div className="hidden sm:block absolute left-[-6px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[7px] border-r-[#1A1815]" />
-                        </>
-                      ) : (
-                        /* Pointer arrow for RIGHT character: points RIGHT towards character */
-                        <>
-                          <div className="hidden sm:block absolute right-[-8px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-l-[8px] border-l-[#D4AF37]" />
-                          <div className="hidden sm:block absolute right-[-6px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[7px] border-l-[#1A1815]" />
-                        </>
-                      )}
-
-                      {/* Mobile Pointer Arrow: points DOWN towards character */}
-                      <div className="sm:hidden absolute bottom-[-8px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[8px] border-t-[#D4AF37]" />
-                      <div className="sm:hidden absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[7px] border-t-[#1A1815]" />
-                    </div>
-
-                    {/* LOTTIE ANIMATED COMPANION CONTAINER */}
-                    <div 
-                      onMouseEnter={() => setHoveredCompanionId(node.id)}
-                      onMouseLeave={() => setHoveredCompanionId(null)}
-                      onClick={() => handleCompanionClick(node.id)}
-                      className="relative w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 cursor-pointer transform hover:scale-110 active:scale-95 transition-transform duration-300 flex items-center justify-center group/mascot z-40"
-                      title="Click companion to hear classical wisdom!"
-                    >
-                      {/* Warm Ambient Campfire Glow Effect */}
-                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-20 sm:w-28 h-6 sm:h-9 bg-amber-500/15 blur-xl rounded-full pointer-events-none animate-pulse" />
-
-                      {/* Lottie Animation Web Component Player */}
-                      <dotlottie-player
-                        src={lottieUrl}
-                        background="transparent"
-                        speed="1"
-                        style={{ width: '100%', height: '100%' }}
-                        loop
-                        autoplay
-                      ></dotlottie-player>
-                    </div>
-
-                  </div>
 
                 </div>
               </div>
