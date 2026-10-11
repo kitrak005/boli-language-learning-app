@@ -25,6 +25,13 @@ import {
 import { LanguageTradition, SkillNode } from '../types';
 import { sound } from '../utils/audio';
 
+// Rotating array of Lottie URLs across pathway nodes
+const LOTTIE_URLS = [
+  'https://lottie.host/1d351d64-6656-4f80-911e-a199736aaff8/QJoxOhulm8.json',
+  'https://lottie.host/b4159218-107d-4ada-8232-a64aa9c4f88c/aDxUTzEcrA.json',
+  'https://lottie.host/2dfc25b8-6b48-4430-a53a-41537cae2fbe/mkJTflo2BQ.json',
+];
+
 // Custom hook to safely load the @dotlottie/player-component web component
 export const useLottiePlayer = () => {
   const [loaded, setLoaded] = useState(false);
@@ -181,29 +188,35 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
   const [internalActiveTab, setInternalActiveTab] = useState('LEARN');
   const currentTab = controlledActiveTab ? controlledActiveTab.toUpperCase() : internalActiveTab;
 
-  const [isNodeHovered, setIsNodeHovered] = useState(false);
-  const [isCharacterHovered, setIsCharacterHovered] = useState(false);
+  // Track hovered node & companion for localized speech bubble reveals
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | number | null>(null);
+  const [hoveredCompanionId, setHoveredCompanionId] = useState<string | number | null>(null);
+
   const [streakCount] = useState(initialStreak);
   const [coinsCount] = useState(initialCoins);
   const [audioMuted, setAudioMuted] = useState(sound.getIsMuted());
   const [selectedNode, setSelectedNode] = useState<PathwayNodeItem | null>(null);
 
-  // Motivational Sanskrit and classical encouraging phrases
-  const phrases = [
+  // Motivational Sanskrit and classical encouraging phrases per companion
+  const motivationalPhrases = [
     "Ready for today's Sanskrit lesson? 🚀",
     "शुभमस्तु! Let's practice! 🪷",
-    "अस्तु! Let's conquer Kutumbam! 🔥",
+    "अस्तु! Let's conquer this path! 🔥",
     "Keep up the streak, Acharya! ✨",
     "Sanskrit is the music of wisdom 🕉️",
     "विद्या ददाति विनयं — Knowledge brings humility! 📖",
     "अभ्यासः परमं बलम् — Practice is true strength! ⚡"
   ];
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const customPhrase = phrases[phraseIndex];
 
-  const handleCharacterClick = () => {
+  // Store click dialogue rotation offsets for each companion
+  const [companionDialogueOffsets, setCompanionDialogueOffsets] = useState<Record<string | number, number>>({});
+
+  const handleCompanionClick = (nodeId: string | number) => {
     sound.playSuccessChime();
-    setPhraseIndex((prev) => (prev + 1) % phrases.length);
+    setCompanionDialogueOffsets((prev) => ({
+      ...prev,
+      [nodeId]: ((prev[nodeId] || 0) + 1) % motivationalPhrases.length,
+    }));
   };
 
   const handleToggleAudio = () => {
@@ -286,7 +299,6 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
     return items;
   }, [externalNodes]);
 
-  const showSpeechBubble = isNodeHovered || isCharacterHovered;
   const headerTitle = currentTradition?.name || DEFAULT_LEVEL_DATA.language;
   const headerDescription = currentTradition?.description || DEFAULT_LEVEL_DATA.description;
   const nativeScript = currentTradition?.nativeScript || "संस्कृतम्";
@@ -334,7 +346,8 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
     }
   };
 
-  // Generate smooth curved SVG spline coordinates connecting all node items
+  // Generate smooth curved organic SVG spline coordinates connecting all node items
+  // Note: NO static vertical line is drawn; only the organic winding S-curve connector
   const { fullPathD, completedPathD } = useMemo(() => {
     const points: { x: number; y: number; status?: string }[] = [];
     let currentY = 80;
@@ -362,7 +375,7 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
       fullD += ` C ${p0.x} ${midY}, ${p1.x} ${midY}, ${p1.x} ${p1.y}`;
     }
 
-    // Find active node index for illuminated path
+    // Find active node index for illuminated gold path
     const activeIdx = points.findIndex((p) => p.status === 'active');
     let compD = '';
     const endIndex = activeIdx >= 0 ? activeIdx : 0;
@@ -379,6 +392,9 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
 
     return { fullPathD: fullD, completedPathD: compD };
   }, [pathwayItems]);
+
+  // Keep track of lesson index for alternating companion positioning
+  let lessonCounter = 0;
 
   return (
     <div className="min-h-screen bg-[#0A0908] text-[#E5E0D8] font-sans selection:bg-[#D4AF37]/30 selection:text-white flex flex-col overflow-x-hidden relative">
@@ -512,7 +528,7 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
         {/* ── PATHWAY SPINE AND NODES CONTAINER ────────────────────────────── */}
         <div className="relative w-full max-w-lg flex flex-col items-center py-4">
 
-          {/* Background Connecting SVG Line */}
+          {/* Background Connecting Organic SVG Spline (NO straight central lines) */}
           <svg 
             className="absolute top-0 left-0 w-full h-full pointer-events-none z-0 overflow-visible" 
             viewBox="0 0 512 1200"
@@ -549,7 +565,7 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
           </svg>
 
           {/* Loop through pathway node items */}
-          {pathwayItems.map((node, index) => {
+          {pathwayItems.map((node) => {
             
             // Level Header Banner
             if (node.type === "level_header") {
@@ -575,16 +591,43 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
               );
             }
 
+            // Lesson Node Calculations
+            const currentLessonIndex = lessonCounter;
+            lessonCounter++;
+
+            // Zig-zag alternating side pattern:
+            // Node 1 (index 0): LEFT
+            // Node 2 (index 1): RIGHT
+            // Node 3 (index 2): LEFT
+            // Node 4 (index 3): RIGHT
+            const isLeft = currentLessonIndex % 2 === 0;
+
+            // Cycle through the 3 Lottie URLs
+            const lottieUrl = LOTTIE_URLS[currentLessonIndex % LOTTIE_URLS.length];
+
             const isActive = node.status === 'active';
             const isCompleted = node.status === 'completed';
             const isLocked = node.status === 'locked';
-            const isOffsetRight = (node.xOffset || 0) > 10;
+
+            const isNodeHovered = hoveredNodeId === node.id;
+            const isCompanionHovered = hoveredCompanionId === node.id;
+            const isThisHovered = isNodeHovered || isCompanionHovered;
+
+            // Speech bubble is visible on active node OR when hovered
+            const showSpeechBubble = isActive || isThisHovered;
+
+            // Contextual dialogue message for this node
+            const offset = companionDialogueOffsets[node.id] || 0;
+            const phraseIdx = (currentLessonIndex + offset) % motivationalPhrases.length;
+            const companionPhrase = motivationalPhrases[phraseIdx];
 
             return (
               <div 
                 key={node.id}
                 ref={isActive ? activeNodeRef : null}
-                className="relative z-10 my-5 flex flex-col items-center group"
+                className={`relative my-6 flex flex-col items-center group transition-all duration-200 ${
+                  showSpeechBubble ? 'z-50' : 'z-20'
+                }`}
                 style={{ transform: `translateX(${node.xOffset || 0}px)` }}
               >
                 {/* Node Title Tooltip Banner */}
@@ -606,8 +649,8 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
                   )}
 
                   <button
-                    onMouseEnter={() => isActive && setIsNodeHovered(true)}
-                    onMouseLeave={() => isActive && setIsNodeHovered(false)}
+                    onMouseEnter={() => setHoveredNodeId(node.id)}
+                    onMouseLeave={() => setHoveredNodeId(null)}
                     onClick={() => handleNodeClick(node)}
                     aria-label={`${node.title} - ${node.subtitle}`}
                     className={`relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-all duration-300 transform active:scale-95 cursor-pointer select-none ${
@@ -640,65 +683,74 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
                     </div>
                   )}
 
-                  {/* ── DYNAMIC COMPANION & DUOLINGO-STYLE SPEECH BUBBLE ──────── */}
-                  {isActive && (
-                    <div 
-                      className={`absolute top-1/2 -translate-y-1/2 flex items-center pointer-events-auto z-30 ${
-                        isOffsetRight 
-                          ? 'right-[calc(100%+14px)] sm:right-[calc(100%+24px)] flex-row-reverse' 
-                          : 'left-[calc(100%+14px)] sm:left-[calc(100%+24px)]'
+                  {/* ── ALTERNATING LOTTIE COMPANION & DYNAMIC SPEECH BUBBLE ──────── */}
+                  <div 
+                    className={`absolute top-1/2 -translate-y-1/2 flex items-center pointer-events-auto z-50 ${
+                      isLeft
+                        ? 'right-[calc(100%+12px)] sm:right-[calc(100%+20px)] flex-row'
+                        : 'left-[calc(100%+12px)] sm:left-[calc(100%+20px)] flex-row'
+                    }`}
+                  >
+                    
+                    {/* DYNAMIC SPEECH BUBBLE (Elevated above SVG and sibling nodes) */}
+                    <div
+                      className={`absolute bottom-full left-1/2 -translate-x-1/2 sm:translate-x-0 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 mb-2 sm:mb-0 bg-[#1A1815] border-2 border-[#D4AF37] text-[#F5E6C8] px-3.5 py-2 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.9),0_0_20px_rgba(212,175,55,0.25)] text-xs sm:text-sm font-medium transition-all duration-300 transform z-50 max-w-[190px] sm:max-w-[240px] whitespace-normal text-center sm:text-left leading-snug ${
+                        isLeft 
+                          ? 'sm:left-[100%] sm:ml-3 origin-center sm:origin-left' 
+                          : 'sm:right-[100%] sm:mr-3 origin-center sm:origin-right'
+                      } ${
+                        showSpeechBubble
+                          ? 'opacity-100 scale-100 pointer-events-auto'
+                          : 'opacity-0 scale-90 pointer-events-none'
                       }`}
                     >
-                      
-                      {/* SPEECH BUBBLE */}
-                      <div
-                        className={`absolute bottom-full left-1/2 -translate-x-1/2 sm:translate-x-0 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 mb-3 sm:mb-0 bg-[#1A1612] border-2 border-[#D4AF37] text-[#F5E6C8] px-4 py-2.5 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.85),0_0_20px_rgba(212,175,55,0.25)] text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-300 transform origin-center sm:origin-right ${
-                          isOffsetRight ? 'sm:left-[100%] sm:ml-3 sm:origin-left' : 'sm:right-[100%] sm:mr-3 sm:origin-right'
-                        } ${
-                          showSpeechBubble
-                            ? 'opacity-100 scale-100 pointer-events-auto'
-                            : 'opacity-0 scale-90 pointer-events-none'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>{customPhrase}</span>
-                        </div>
+                      <div className="flex items-center gap-1.5">
+                        <span>{companionPhrase}</span>
+                      </div>
 
-                        {/* Pointer Arrow Tail for Speech Bubble Desktop */}
-                        {isOffsetRight ? (
+                      {/* Desktop Pointer Arrow */}
+                      {isLeft ? (
+                        /* Pointer arrow for LEFT character: points LEFT towards character */
+                        <>
                           <div className="hidden sm:block absolute left-[-8px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[8px] border-r-[#D4AF37]" />
-                        ) : (
+                          <div className="hidden sm:block absolute left-[-6px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[7px] border-r-[#1A1815]" />
+                        </>
+                      ) : (
+                        /* Pointer arrow for RIGHT character: points RIGHT towards character */
+                        <>
                           <div className="hidden sm:block absolute right-[-8px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-l-[8px] border-l-[#D4AF37]" />
-                        )}
+                          <div className="hidden sm:block absolute right-[-6px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[7px] border-l-[#1A1815]" />
+                        </>
+                      )}
 
-                        {/* Pointer Arrow Tail for Speech Bubble Mobile (pointing down to companion) */}
-                        <div className="sm:hidden absolute bottom-[-8px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[8px] border-t-[#D4AF37]" />
-                      </div>
-
-                      {/* LOTTIE BEAR COMPANION CHARACTER CONTAINER */}
-                      <div 
-                        onMouseEnter={() => setIsCharacterHovered(true)}
-                        onMouseLeave={() => setIsCharacterHovered(false)}
-                        onClick={handleCharacterClick}
-                        className="relative w-32 h-32 sm:w-52 sm:h-52 cursor-pointer transform hover:scale-105 active:scale-95 transition-transform duration-300 flex items-center justify-center group/bear"
-                        title="Click to talk with your Guru Companion!"
-                      >
-                        {/* Campfire Warm Ambient Glow */}
-                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-28 sm:w-40 h-8 sm:h-12 bg-gradient-to-r from-amber-500/30 via-orange-500/25 to-yellow-500/30 blur-xl rounded-full pointer-events-none animate-pulse" />
-
-                        {/* Lottie Animation Element Component */}
-                        <dotlottie-player
-                          src="https://lottie.host/0d7d5633-f6ab-45ea-9e32-147ee6188c4f/H4tG63u523.json"
-                          background="transparent"
-                          speed="1"
-                          style={{ width: '100%', height: '100%' }}
-                          loop
-                          autoplay
-                        ></dotlottie-player>
-                      </div>
-
+                      {/* Mobile Pointer Arrow: points DOWN towards character */}
+                      <div className="sm:hidden absolute bottom-[-8px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[8px] border-t-[#D4AF37]" />
+                      <div className="sm:hidden absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[7px] border-t-[#1A1815]" />
                     </div>
-                  )}
+
+                    {/* LOTTIE ANIMATED COMPANION CONTAINER */}
+                    <div 
+                      onMouseEnter={() => setHoveredCompanionId(node.id)}
+                      onMouseLeave={() => setHoveredCompanionId(null)}
+                      onClick={() => handleCompanionClick(node.id)}
+                      className="relative w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 cursor-pointer transform hover:scale-110 active:scale-95 transition-transform duration-300 flex items-center justify-center group/mascot z-40"
+                      title="Click companion to hear classical wisdom!"
+                    >
+                      {/* Warm Ambient Campfire Glow Effect */}
+                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-20 sm:w-28 h-6 sm:h-9 bg-amber-500/15 blur-xl rounded-full pointer-events-none animate-pulse" />
+
+                      {/* Lottie Animation Web Component Player */}
+                      <dotlottie-player
+                        src={lottieUrl}
+                        background="transparent"
+                        speed="1"
+                        style={{ width: '100%', height: '100%' }}
+                        loop
+                        autoplay
+                      ></dotlottie-player>
+                    </div>
+
+                  </div>
 
                 </div>
               </div>
