@@ -3,6 +3,7 @@ import { X, Heart, Volume2, Sparkles, CheckCircle2, AlertCircle, ArrowRight, Rot
 import { Exercise, SkillNode, WordTile, TraditionId } from '../types';
 import { sound } from '../utils/audio';
 import { IndianTeacher, GuruEmotion } from './IndianTeacher';
+import { logMistake } from '../utils/mistakesVault';
 
 interface LessonModalProps {
   node: SkillNode;
@@ -200,6 +201,18 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
       setTeacherEmotion('encouraging');
       setTeacherTip('चिन्ता मा कुरु (Do not worry). Review the Sandhi and try again.');
       setHearts((prev) => Math.max(0, prev - 1));
+
+      // Automatically log mistake into the Mistakes Vault
+      logMistake({
+        source: 'lesson',
+        languageId: currentTraditionId,
+        question: currentExercise.promptText || currentExercise.instruction,
+        userWrongAnswer: placedWords.map((p) => p.word.script).join(' ') || '(Incomplete)',
+        correctAnswer: currentExercise.targetScript || currentExercise.targetTranslation,
+        transliteration: currentExercise.targetTransliteration,
+        explanation: currentExercise.explanation,
+        options: currentExercise.wordBank.map((w) => w.script),
+      });
     }
   };
 

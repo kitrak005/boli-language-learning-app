@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Volume2,
   RotateCcw,
@@ -19,6 +19,8 @@ import { sound } from '../utils/audio';
 import { IndianTeacher, GuruEmotion } from './IndianTeacher';
 import { PronunciationCoach } from './PronunciationCoach';
 import { SpeechRecognitionResultData } from '../utils/speechRecognition';
+import { MistakesVaultPanel } from './MistakesVaultPanel';
+import { getMistakesVault, logMistake } from '../utils/mistakesVault';
 
 interface PracticeViewProps {
   currentTraditionId: TraditionId;
@@ -129,7 +131,8 @@ const VOICE_LAB_CATALOG: VoiceLabItem[] = [
 ];
 
 export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, onEarnXp }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'flashcards' | 'voicelab' | 'alphabet'>('flashcards');
+  const [activeSubTab, setActiveSubTab] = useState<'flashcards' | 'voicelab' | 'alphabet' | 'mistakes'>('flashcards');
+  const [vaultCount, setVaultCount] = useState<number>(0);
   const [cardIndex, setCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [showSpeechCoachOnCard, setShowSpeechCoachOnCard] = useState(false);
@@ -139,6 +142,16 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
   const [teacherMessage, setTeacherMessage] = useState<string>(
     'Recite classical mantras or practice with speech recognition.'
   );
+
+  // Sync active mistakes count from vault
+  useEffect(() => {
+    const updateCount = () => {
+      setVaultCount(getMistakesVault().length);
+    };
+    updateCount();
+    window.addEventListener('mistakes_vault_updated', updateCount);
+    return () => window.removeEventListener('mistakes_vault_updated', updateCount);
+  }, []);
 
   // Voice Lab state
   const [selectedVoiceLabItem, setSelectedVoiceLabItem] = useState<VoiceLabItem>(VOICE_LAB_CATALOG[0]);
@@ -201,6 +214,16 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
       sound.playTileClick();
       setTeacherEmotion('encouraging');
       setTeacherMessage('अभ्यासः (Practice) makes every mantra natural.');
+      // Automatically log difficult card to Mistakes Vault
+      logMistake({
+        source: 'flashcard',
+        languageId: currentTraditionId,
+        question: `Recall term: "${currentCard.meaning}"`,
+        userWrongAnswer: 'Need Review',
+        correctAnswer: currentCard.script,
+        transliteration: currentCard.transliteration,
+        explanation: `${currentCard.meaning} (${currentCard.partOfSpeech})`,
+      });
     }
 
     if (cardIndex < FLASHCARDS_DECK.length - 1) {
@@ -314,6 +337,30 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
               }`}
           >
             Script Explorer
+          </button>
+
+          <button
+            id="tab-btn-mistakes"
+            onClick={() => {
+              sound.playTileClick();
+              setActiveSubTab('mistakes');
+            }}
+            className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-lg text-xs uppercase tracking-[0.15em] font-medium transition-all cursor-pointer ${activeSubTab === 'mistakes'
+                ? 'bg-[#C5A059] text-[#0A0A0A] font-bold shadow-md shadow-[#C5A059]/20'
+                : 'text-white/50 hover:text-white'
+              }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Mistake Vault</span>
+            {vaultCount > 0 && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                  activeSubTab === 'mistakes' ? 'bg-black/30 text-black' : 'bg-[#C5A059]/20 text-[#DFC386]'
+                }`}
+              >
+                {vaultCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -654,6 +701,22 @@ export const PracticeView: React.FC<PracticeViewProps> = ({ currentTraditionId, 
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 4: Mistakes Vault & Review Panel */}
+      {activeSubTab === 'mistakes' && (
+        <MistakesVaultPanel
+          currentTraditionId={currentTraditionId}
+          onEarnXp={onEarnXp}
+          onUpdateTeacher={(emotion, message) => {
+            setTeacherEmotion(emotion);
+            setTeacherMessage(message);
+          }}
+          onSwitchTab={(tab) => {
+            sound.playTileClick();
+            setActiveSubTab(tab);
+          }}
+        />
       )}
     </div>
   );

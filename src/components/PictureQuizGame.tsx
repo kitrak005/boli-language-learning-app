@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Sparkles, RefreshCw, CheckCircle2, XCircle, Lightbulb, BookOpen, Loader2, ImageOff } from 'lucide-react';
 import { TraditionId } from '../types';
 import { sound } from '../utils/audio';
+import { logMistake } from '../utils/mistakesVault';
 
 interface QuizOption {
     text: string;
@@ -105,6 +106,17 @@ export const PictureQuizGame: React.FC<PictureQuizGameProps> = ({ currentTraditi
         } else {
             sound.playErrorChime();
             setStreak(0);
+            logMistake({
+                source: 'picture_quiz',
+                languageId: currentTraditionId,
+                question: question.question,
+                userWrongAnswer: shuffledOptions[idx].text,
+                correctAnswer: question.nativeWord,
+                transliteration: question.pronunciation,
+                explanation: question.explanation,
+                options: shuffledOptions.map((o) => o.text),
+                correctIndex: shuffledOptions.findIndex((o) => o.isCorrect),
+            });
         }
     };
 
