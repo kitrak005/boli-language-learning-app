@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { LanguageTradition, SkillNode } from '../types';
 import { sound } from '../utils/audio';
+import { SANSKRIT_SKILL_TREE } from '../data/skillTrees';
 
 // Rotating array of Lottie URLs across Level Section Headers
 const LEVEL_LOTTIE_URLS = [
@@ -308,7 +309,15 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
     }
     sound.playTileClick();
     const original = node.originalNode;
-    const nodeToSelect = original || ({
+    const fallbackNode =
+      SANSKRIT_SKILL_TREE.find(
+        (sn) =>
+          sn.id === String(node.id) ||
+          sn.title.toLowerCase() === node.title.toLowerCase() ||
+          sn.subtitle.toLowerCase() === node.subtitle.toLowerCase()
+      ) || SANSKRIT_SKILL_TREE[0];
+
+    const nodeToSelect = original || fallbackNode || ({
       id: String(node.id),
       levelNumber: 1,
       title: node.title,
@@ -316,7 +325,7 @@ export const SanctuaryPathway: React.FC<SanctuaryPathwayProps> = ({
       status: node.status || 'active',
       iconType: 'play',
       alignment: 'center',
-      exercises: [],
+      exercises: SANSKRIT_SKILL_TREE[0]?.exercises || [],
     } as SkillNode);
 
     if (onSelectNode) {

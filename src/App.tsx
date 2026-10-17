@@ -83,7 +83,7 @@ export default function App() {
     }
   };
 
-  const SKILL_TREE_VERSION = 3; // v3 = 5-level trees (15 nodes per language, new node IDs)
+  const SKILL_TREE_VERSION = 4; // v4 = dynamic slot sizing, full 6+ word sentence support across all languages
 
   const [currentTraditionId, setCurrentTraditionId] = useState<TraditionId>('sanskrit');
   const [isTraditionModalOpen, setIsTraditionModalOpen] = useState(false);

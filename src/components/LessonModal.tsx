@@ -48,12 +48,79 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
   const exercises = node.exercises.length > 0 ? node.exercises : [defaultExercise];
   const currentExercise = exercises[currentExerciseIndex] || defaultExercise;
 
+  // Determine target sequence dynamically based on current exercise's word sequence
+  const targetSlotSequence = useMemo(() => {
+    if (Array.isArray(currentExercise?.correctSequence) && currentExercise.correctSequence.length > 0) {
+      return currentExercise.correctSequence;
+    }
+    const text = currentExercise?.targetTranslation || currentExercise?.targetScript || '';
+    const tokens = text.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length > 0) {
+      const bank = currentExercise?.wordBank || [];
+      return tokens.map((t, idx) => {
+        const found = bank.find((b) => b.script === t || b.id === t);
+        return found ? found.id : `token-${idx}`;
+      });
+    }
+    return (currentExercise?.wordBank || []).map((w) => w.id);
+  }, [currentExercise]);
+
+  const totalSlotsNeeded = targetSlotSequence.length;
+
+  // Dynamic slot sizing & font scale based on target sentence word count (e.g. 3 vs 6 vs 8-10 words)
+  const slotDims = useMemo(() => {
+    if (totalSlotsNeeded <= 4) {
+      return {
+        height: 'h-16 sm:h-20',
+        minWidth: 'min-w-[80px] sm:min-w-[110px]',
+        fontSize: 'text-xl sm:text-2xl',
+        translitSize: 'text-[11px] sm:text-xs',
+        padding: 'px-3 sm:px-5',
+        bankBtnHeight: 'min-h-[58px] sm:min-h-[66px]',
+        bankBtnPadding: 'px-4 sm:px-6 py-2 sm:py-2.5',
+        bankFontSize: 'text-xl sm:text-2xl',
+      };
+    }
+    if (totalSlotsNeeded <= 6) {
+      return {
+        height: 'h-14 sm:h-16',
+        minWidth: 'min-w-[64px] sm:min-w-[86px]',
+        fontSize: 'text-lg sm:text-xl',
+        translitSize: 'text-[10px] sm:text-[11px]',
+        padding: 'px-2.5 sm:px-4',
+        bankBtnHeight: 'min-h-[52px] sm:min-h-[60px]',
+        bankBtnPadding: 'px-3 sm:px-5 py-1.5 sm:py-2',
+        bankFontSize: 'text-lg sm:text-xl',
+      };
+    }
+    if (totalSlotsNeeded <= 8) {
+      return {
+        height: 'h-12 sm:h-14',
+        minWidth: 'min-w-[54px] sm:min-w-[72px]',
+        fontSize: 'text-base sm:text-lg',
+        translitSize: 'text-[9px] sm:text-[10px]',
+        padding: 'px-2 sm:px-3',
+        bankBtnHeight: 'min-h-[46px] sm:min-h-[54px]',
+        bankBtnPadding: 'px-2.5 sm:px-4 py-1 sm:py-1.5',
+        bankFontSize: 'text-base sm:text-lg',
+      };
+    }
+    // 9+ words
+    return {
+      height: 'h-11 sm:h-13',
+      minWidth: 'min-w-[46px] sm:min-w-[62px]',
+      fontSize: 'text-sm sm:text-base',
+      translitSize: 'text-[8.5px]',
+      padding: 'px-2 sm:px-2.5',
+      bankBtnHeight: 'min-h-[42px] sm:min-h-[50px]',
+      bankBtnPadding: 'px-2 sm:px-3.5 py-1',
+      bankFontSize: 'text-sm sm:text-base',
+    };
+  }, [totalSlotsNeeded]);
+
   // Shuffle the word bank ONCE per exercise (keyed on currentExerciseIndex),
   // not on every render — otherwise tiles would visibly reorder themselves
-  // every time the component re-renders (e.g. after placing a tile), which
-  // would be janky and confusing. Previously wordBank was rendered in its
-  // original authored order, which listed correct-sequence words first
-  // followed by distractors — trivially revealing the answer by position.
+  // every time the component re-renders (e.g. after placing a tile).
   const shuffledWordBank = useMemo(() => {
     const arr = [...currentExercise.wordBank];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -68,7 +135,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
 
   const handlePlaceWord = (word: WordTile) => {
     if (feedbackStatus !== 'idle') return;
-    if (placedWords.length >= currentExercise.correctSequence.length) return;
+    if (placedWords.length >= totalSlotsNeeded) return;
     if (placedWords.some((p) => p.word.id === word.id)) return;
 
     sound.unlockAudio();
@@ -94,21 +161,32 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
   const handleCheck = () => {
     if (placedWords.length === 0 || feedbackStatus !== 'idle') return;
 
-    // Check matching by tile IDs against correctSequence
+    // 1. Check matching by tile IDs against targetSlotSequence
     const isIdMatch =
-      placedWords.length === currentExercise.correctSequence.length &&
-      placedWords.every((p, idx) => p.word.id === currentExercise.correctSequence[idx]);
+      placedWords.length === targetSlotSequence.length &&
+      placedWords.every((p, idx) => p.word.id === targetSlotSequence[idx]);
 
-    // Fallback: compare by script text in case duplicate tiles (-dup, -dup2) were placed in alternative order
+    // 2. Fallback: compare by script text in case duplicate tiles (-dup, -dup2) were placed in alternative order
     const wordBankById = new Map(currentExercise.wordBank.map((w) => [w.id, w]));
-    const correctScripts = currentExercise.correctSequence.map((id) => wordBankById.get(id)?.script);
-    const placedScripts = placedWords.map((p) => p.word.script);
+    const correctScripts = targetSlotSequence.map((id) => wordBankById.get(id)?.script?.trim());
+    const placedScripts = placedWords.map((p) => p.word.script?.trim());
 
     const isScriptMatch =
       placedScripts.length === correctScripts.length &&
       placedScripts.every((script, idx) => script === correctScripts[idx]);
 
-    const isCorrect = isIdMatch || isScriptMatch;
+    // 3. Normalized comparison (handling colon ':' vs visarga 'ः' and punctuation)
+    const normalize = (s?: string) =>
+      (s || '')
+        .replace(/[:ः]/g, 'ः')
+        .replace(/[.,;?!।॥]/g, '')
+        .trim();
+
+    const isNormalizedMatch =
+      placedScripts.length === correctScripts.length &&
+      placedScripts.every((script, idx) => normalize(script) === normalize(correctScripts[idx]));
+
+    const isCorrect = isIdMatch || isScriptMatch || isNormalizedMatch;
 
     if (isCorrect) {
       sound.playSuccessChime();
@@ -225,46 +303,79 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
             </div>
           </div>
 
-          {/* Construction Area */}
-          <div className="w-full min-h-[110px] sm:min-h-[128px] flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 p-4 sm:p-6 bg-[#121212] border border-white/10 rounded-2xl mb-6 sm:mb-8 shadow-2xl">
-            {/* Active Placed Tiles */}
-            {placedWords.map(({ instanceId, word }) => (
-              <div
-                key={instanceId}
-                id={`placed-tile-${instanceId}`}
-                onClick={() => handleRemoveWord(instanceId)}
-                className="h-16 px-4 sm:px-5 bg-[#1C1C1E] border border-[#C5A059]/40 rounded-xl flex flex-col items-center justify-center cursor-pointer shadow-md relative overflow-hidden group hover:border-rose-500 transition-all"
-              >
-                <span className="text-2xl leading-tight text-white font-serif">
-                  {word.script}
-                </span>
-                <span className="text-[11px] text-[#C5A059]/80 font-mono tracking-wider">{word.transliteration}</span>
+          {/* Construction Area / Sentence Assembly Drop Zone Container */}
+          <div
+            className="w-full flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 p-3.5 sm:p-5 bg-[#121212]/95 border border-white/10 rounded-2xl mb-5 sm:mb-6 shadow-2xl backdrop-blur-md transition-all duration-300"
+            style={{ minHeight: totalSlotsNeeded > 5 ? '132px' : '110px' }}
+          >
+            {Array.from({ length: totalSlotsNeeded }).map((_, slotIndex) => {
+              const placed = placedWords[slotIndex];
+              const isNextSlot = slotIndex === placedWords.length;
 
-                {/* Hover overlay to remove */}
-                <div className="absolute inset-0 bg-rose-950/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <X className="w-5 h-5 text-rose-300" />
-                </div>
-              </div>
-            ))}
+              if (placed) {
+                const { instanceId, word } = placed;
+                return (
+                  <div
+                    key={instanceId}
+                    id={`placed-tile-${instanceId}`}
+                    onClick={() => handleRemoveWord(instanceId)}
+                    className={`relative ${slotDims.height} ${slotDims.minWidth} ${slotDims.padding} bg-[#1C1C1E] border border-[#C5A059]/60 rounded-xl flex flex-col items-center justify-center cursor-pointer shadow-lg hover:border-rose-500 hover:bg-rose-950/20 active:scale-95 transition-all group overflow-hidden select-none animate-in zoom-in-95 duration-150`}
+                    title="Click to remove word"
+                  >
+                    <span className={`leading-tight text-white font-serif font-medium text-center truncate max-w-full ${slotDims.fontSize}`}>
+                      {word.script}
+                    </span>
+                    <span className={`text-[#C5A059]/90 font-mono tracking-wider text-center truncate max-w-full ${slotDims.translitSize}`}>
+                      {word.transliteration}
+                    </span>
 
-            {/* Empty Slots */}
-            {Array.from({
-              length: Math.max(0, currentExercise.correctSequence.length - placedWords.length),
-            }).map((_, idx) => (
-              <div
-                key={`empty-slot-${idx}`}
-                className={`h-14 sm:h-16 w-16 sm:w-24 border-b-2 flex items-center justify-center transition-colors ${idx === 0 ? 'border-[#C5A059]' : 'border-white/20'
+                    {/* Hover overlay to remove */}
+                    <div className="absolute inset-0 bg-rose-950/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
+                      <X className="w-4 h-4 sm:w-5 sm:h-5 text-rose-300" />
+                    </div>
+
+                    {/* Slot number index */}
+                    <div className="absolute bottom-0.5 right-1 text-[8px] font-mono text-white/20 select-none">
+                      {slotIndex + 1}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Empty interactive drop slot
+              return (
+                <div
+                  key={`empty-slot-${slotIndex}`}
+                  className={`relative ${slotDims.height} ${slotDims.minWidth} ${slotDims.padding} rounded-xl flex flex-col items-center justify-center transition-all duration-200 select-none ${
+                    isNextSlot
+                      ? 'border-2 border-dashed border-[#C5A059] bg-[#C5A059]/10 shadow-[0_0_15px_rgba(197,160,89,0.25)] animate-pulse'
+                      : 'border-2 border-dashed border-white/15 bg-white/[0.02]'
                   }`}
-              />
-            ))}
+                  title={isNextSlot ? 'Next word will drop here' : `Slot ${slotIndex + 1}`}
+                >
+                  <span
+                    className={`text-[11px] sm:text-xs font-mono font-medium tracking-wider transition-colors ${
+                      isNextSlot ? 'text-[#C5A059]' : 'text-white/25'
+                    }`}
+                  >
+                    {slotIndex + 1}
+                  </span>
+                  <div
+                    className={`w-4 h-0.5 mt-1 rounded-full ${
+                      isNextSlot ? 'bg-[#C5A059]' : 'bg-white/10'
+                    }`}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Word Bank Tiles — shuffled per exercise. Duplicate words have unique IDs (-dup, -dup2)
               so each tile can only be placed once into a slot. */}
-          <div className="w-full flex flex-wrap items-center justify-center gap-2 sm:gap-3 max-w-xl mx-auto px-1">
+          <div className="w-full flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 max-w-xl mx-auto px-1">
             {shuffledWordBank.map((word) => {
               const isTilePlaced = placedWords.some((p) => p.word.id === word.id);
-              const allSlotsFilled = placedWords.length >= currentExercise.correctSequence.length;
+              const allSlotsFilled = placedWords.length >= totalSlotsNeeded;
 
               return (
                 <button
@@ -272,17 +383,22 @@ export const LessonModal: React.FC<LessonModalProps> = ({ node, currentTradition
                   id={`word-bank-${word.id}`}
                   onClick={() => handlePlaceWord(word)}
                   disabled={allSlotsFilled || isTilePlaced}
-                  className={`relative min-h-[58px] sm:min-h-[66px] px-3.5 sm:px-6 py-1.5 sm:py-2 rounded-xl flex flex-col items-center justify-center transition-all ${isTilePlaced
-                    ? 'bg-white/[0.02] text-white/20 opacity-30 cursor-not-allowed border border-white/5'
-                    : allSlotsFilled
+                  className={`relative ${slotDims.bankBtnHeight} ${slotDims.bankBtnPadding} rounded-xl flex flex-col items-center justify-center transition-all ${
+                    isTilePlaced
+                      ? 'bg-white/[0.02] text-white/20 opacity-30 cursor-not-allowed border border-white/5 scale-95'
+                      : allSlotsFilled
                       ? 'bg-white/[0.03] text-white/30 opacity-40 cursor-not-allowed border border-white/10'
-                      : 'bg-[#161616] border border-white/15 text-white hover:border-[#C5A059] hover:bg-[#1E1E1E] active:scale-95 cursor-pointer group shadow-lg'
-                    }`}
+                      : 'bg-[#161616] border border-white/15 text-white hover:border-[#C5A059] hover:bg-[#1E1E1E] hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] active:scale-95 cursor-pointer group shadow-lg'
+                  }`}
                 >
-                  <span className="text-lg sm:text-2xl leading-tight text-white group-hover:text-[#C5A059] font-serif transition-colors">
+                  <span
+                    className={`leading-tight text-white group-hover:text-[#C5A059] font-serif transition-colors truncate max-w-full ${slotDims.bankFontSize}`}
+                  >
                     {word.script}
                   </span>
-                  <span className="text-[10px] sm:text-xs text-white/50 group-hover:text-white/70 font-mono">{word.transliteration}</span>
+                  <span className="text-[10px] sm:text-xs text-white/50 group-hover:text-white/70 font-mono truncate max-w-full">
+                    {word.transliteration}
+                  </span>
                 </button>
               );
             })}
