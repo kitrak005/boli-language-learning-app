@@ -243,7 +243,7 @@ export function RankedMatchScreen({
     };
   }, [stopSearch]);
 
-  const setupLocalQuiz = () => {
+  const setupLocalQuiz = useCallback(() => {
     const qList = getQuestionsForCategory(category, 5);
     setLocalQuestions(qList);
     setCurrentRoundIdx(0);
@@ -251,7 +251,7 @@ export function RankedMatchScreen({
     setBotScore(0);
     setMyStreak(0);
     setBotAnswered(false);
-  };
+  }, [category]);
 
   // ─── Bot Simulation ──────────────────────────────────────────────────────
 
@@ -661,7 +661,13 @@ export function RankedMatchScreen({
         </div>
 
         {/* 2-second countdown auto-start */}
-        <VSAutoStart onStart={() => setPhase('battle')} />
+        <VSAutoStart onStart={() => {
+          // Ensure local bot state is clean at round 1 before entering battle
+          if (opponent?.isBot) {
+            setupLocalQuiz();
+          }
+          setPhase('battle');
+        }} />
       </div>
     );
   }
@@ -807,8 +813,17 @@ export function RankedMatchScreen({
           <button
             type="button"
             onClick={() => {
-              setPhase('idle');
+              // Full state reset for next match
+              setCurrentRoundIdx(0);
+              setMyScore(0);
+              setBotScore(0);
+              setMyStreak(0);
+              setBotAnswered(false);
+              setLocalQuestions([]);
               setOpponent(null);
+              setRatingDelta(0);
+              setAnimatedDelta(0);
+              setPhase('idle');
             }}
             className="w-full py-3.5 rounded-xl bg-[#C5A059] text-[#0A0A0A] font-serif font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-[#C5A059]/20 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
           >

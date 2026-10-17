@@ -1,5 +1,5 @@
 {
-  "name": "Vākya",
+  "name": "bolvani",
   "description": "Digital sanctuary and interactive learning platform for classical Indian languages and manuscripts.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

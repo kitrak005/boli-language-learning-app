@@ -266,8 +266,15 @@ export function useBattleMatch(matchId: string, currentUserId: string) {
     [matchId, currentUserId, question]
   );
 
+  const lastAdvancedRoundRef = useRef<number>(0);
+
   const advanceRound = useCallback(async () => {
     if (!match) return;
+
+    // Guard: prevent double-advancing the same round (timer + both-answered race)
+    if (lastAdvancedRoundRef.current >= match.current_round) return;
+    lastAdvancedRoundRef.current = match.current_round;
+
     const nextRound = match.current_round + 1;
     const finished = nextRound > match.total_rounds;
 

@@ -65,8 +65,8 @@ begin
   -- Opponent found at the same level: remove both from queue and create match
   delete from battle_queue where user_id in (auth.uid(), v_opponent);
 
-  insert into battle_matches (player1_id, player2_id, category, status)
-  values (v_opponent, auth.uid(), p_category, 'active')
+  insert into battle_matches (player1_id, player2_id, category, status, current_round, total_rounds)
+  values (v_opponent, auth.uid(), p_category, 'active', 1, 5)
   returning id into v_match_id;
 
   return v_match_id;

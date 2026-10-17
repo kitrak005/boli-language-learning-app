@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Swords, Brain, Volume2, CheckCircle2, XCircle, Flag } from 'lucide-react';
 
 export interface BattlePlayer {
@@ -30,9 +30,18 @@ export interface BattleGameScreenProps {
   onForfeit?: () => void;
   latencyMs?: number;
   onPlayAudio?: () => void;
+  /** Incoming reaction from the opponent to display over their avatar */
+  incomingReaction?: string | null;
 }
 
-const TAUNTS = ['👏', '⚡', '🤯'];
+const REACTIONS = ['🙏', '🤔', '🔥', '🏆'];
+
+/** Individual floating reaction bubble */
+interface FloatingReaction {
+  id: number;
+  emoji: string;
+  target: 'me' | 'opponent';
+}
 
 export function BattleGameScreen({
   currentPlayer,
@@ -55,10 +64,40 @@ export function BattleGameScreen({
   onForfeit,
   latencyMs = 24,
   onPlayAudio,
+  incomingReaction,
 }: BattleGameScreenProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(duration);
   const timeUpFiredRef = useRef(false);
+
+  // Floating reaction state
+  const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+  const reactionIdCounter = useRef(0);
+
+  const spawnFloatingReaction = useCallback((emoji: string, target: 'me' | 'opponent') => {
+    const id = ++reactionIdCounter.current;
+    setFloatingReactions((prev) => [...prev, { id, emoji, target }]);
+    // Remove after animation completes (1.2s)
+    setTimeout(() => {
+      setFloatingReactions((prev) => prev.filter((r) => r.id !== id));
+    }, 1200);
+  }, []);
+
+  // Handle sending a reaction
+  const handleReaction = useCallback(
+    (emoji: string) => {
+      spawnFloatingReaction(emoji, 'me');
+      onTaunt?.(emoji);
+    },
+    [onTaunt, spawnFloatingReaction]
+  );
+
+  // Display incoming opponent reaction
+  useEffect(() => {
+    if (incomingReaction) {
+      spawnFloatingReaction(incomingReaction, 'opponent');
+    }
+  }, [incomingReaction, spawnFloatingReaction]);
 
   useEffect(() => {
     setSelectedIndex(null);
@@ -111,8 +150,35 @@ export function BattleGameScreen({
 
   const letters = ['A', 'B', 'C', 'D'] as const;
 
+  // Reactions floating over the "me" avatar
+  const myReactions = floatingReactions.filter((r) => r.target === 'me');
+  // Reactions floating over the opponent avatar
+  const oppReactions = floatingReactions.filter((r) => r.target === 'opponent');
+
   return (
     <div className="min-h-screen bg-[#121212] text-white flex justify-center selection:bg-[#C5A059]/30">
+      {/* Floating reaction keyframes */}
+      <style>{`
+        @keyframes reaction-float {
+          0%   { opacity: 1; transform: translateY(0) scale(1); }
+          60%  { opacity: 1; transform: translateY(-48px) scale(1.2); }
+          100% { opacity: 0; transform: translateY(-72px) scale(0.8); }
+        }
+        .reaction-float {
+          animation: reaction-float 1.2s ease-out forwards;
+          pointer-events: none;
+        }
+        .reaction-btn {
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .reaction-btn:hover {
+          transform: scale(1.1);
+          box-shadow: 0 0 12px rgba(197, 160, 89, 0.5);
+        }
+        .reaction-btn:active {
+          transform: scale(0.92);
+        }
+      `}</style>
       <main className="w-full max-w-[420px] min-h-screen flex flex-col justify-between p-4 pb-6 select-none">
         {/* TOP: Match info & live HUD */}
         <header className="space-y-3">
@@ -153,6 +219,15 @@ export function BattleGameScreen({
                     LV.{currentPlayer.level}
                   </span>
                 )}
+                {/* Floating reactions over my avatar */}
+                {myReactions.map((r) => (
+                  <span
+                    key={r.id}
+                    className="absolute -top-2 left-1/2 -translate-x-1/2 text-2xl reaction-float z-50"
+                  >
+                    {r.emoji}
+                  </span>
+                ))}
               </div>
               <div>
                 <div className="flex items-center gap-1.5 text-xs text-white/50 font-medium">
@@ -200,6 +275,15 @@ export function BattleGameScreen({
                     LV.{opponent.level}
                   </span>
                 )}
+                {/* Floating reactions over opponent avatar */}
+                {oppReactions.map((r) => (
+                  <span
+                    key={r.id}
+                    className="absolute -top-2 left-1/2 -translate-x-1/2 text-2xl reaction-float z-50"
+                  >
+                    {r.emoji}
+                  </span>
+                ))}
               </div>
               <div>
                 <div className="flex items-center justify-end gap-1 text-xs text-white/50 font-medium">
@@ -275,8 +359,34 @@ export function BattleGameScreen({
           </div>
         </section>
 
-        {/* BOTTOM: Answer grid + taunt dock */}
+        {/* BOTTOM: Reaction bar + Answer grid + footer */}
         <footer className="space-y-3">
+          {/* Quick Reaction Emoji Bar — between question card and answer grid */}
+          <div className="flex items-center justify-center gap-2 py-1.5 relative z-30" style={{ pointerEvents: 'auto' }}>
+            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest mr-0.5">React</span>
+            {REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => handleReaction(emoji)}
+                className="reaction-btn w-10 h-10 rounded-xl bg-[#161616] border border-white/10 hover:border-[#C5A059]/60 flex items-center justify-center text-lg cursor-pointer relative z-30"
+                style={{ pointerEvents: 'auto' }}
+                aria-label={`Send ${emoji} reaction`}
+              >
+                {emoji}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => handleReaction('GG!')}
+              className="reaction-btn px-3 h-10 rounded-xl bg-[#161616] border border-white/10 hover:border-[#C5A059]/60 flex items-center justify-center text-xs font-bold text-[#C5A059] cursor-pointer relative z-30"
+              style={{ pointerEvents: 'auto' }}
+              aria-label="Send GG reaction"
+            >
+              GG!
+            </button>
+          </div>
+
           <div className="grid grid-cols-2 gap-2.5">
             {answers.map((answer, index) => {
               const isSelected = selectedIndex === index;
@@ -331,28 +441,8 @@ export function BattleGameScreen({
             })}
           </div>
 
-          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#161616] border border-white/10">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest mr-1">Taunt</span>
-              {TAUNTS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => onTaunt?.(emoji)}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 active:scale-90 flex items-center justify-center text-sm transition-transform"
-                >
-                  {emoji}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => onTaunt?.('GG!')}
-                className="px-2 h-8 rounded-lg bg-white/5 hover:bg-white/10 active:scale-90 flex items-center justify-center text-xs font-bold text-[#C5A059] transition-transform"
-              >
-                GG!
-              </button>
-            </div>
-
+          {/* Footer: latency + forfeit */}
+          <div className="flex items-center justify-end px-3 py-2 rounded-xl bg-[#161616] border border-white/10">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 text-[11px] font-medium text-white/50">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
